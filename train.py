@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import torch
 import wandb
 from torch.nn import CrossEntropyLoss
@@ -16,7 +18,9 @@ cfg = {
     "d_model": 512,
     "d_ff": 2048,
     "log_freq": 5,
-    "prompt_log_freq": 5
+    "prompt_log_freq": 5,
+    "epoches": 1000,
+    "chkpoint_freq": 25
 }
 
 
@@ -44,13 +48,16 @@ test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
 columns = ["Epoch", "Input", "Output"]
 
+CHECKPOINTS_DIR = Path('checkpoints')
+CHECKPOINTS_DIR.mkdir(parents=True, exist_ok=True)
+
 
 with wandb.init(config=cfg) as run:
     table = wandb.Table(columns=columns, log_mode="INCREMENTAL")
     run.watch(transformer, loss_fn, log_freq=10)
 
     for epoch in tqdm(range(100)):
-        for item in tqdm(dataloader, leave=False):
+        for item in tqdm(dataloader, total=len(dataloader), leave=False):
             mask = prepare_mask(item['attention_mask']).to('cuda')
             inputs = item['input_ids'].to('cuda')
             targets = item['labels'].to('cuda')
@@ -70,7 +77,6 @@ with wandb.init(config=cfg) as run:
         if epoch % cfg['prompt_log_freq'] == 0:
             transformer.eval()
 
-
             for text in test_dataloader:
                 inputs = text['input_ids'].to('cuda')
                 mask = prepare_mask(text['attention_mask']).to('cuda')
@@ -82,3 +88,15 @@ with wandb.init(config=cfg) as run:
             run.log({"Example outputs": table}, step=epoch)
 
             transformer.train()
+
+        if epoch % cfg["chkpoint_freq"] == 0:
+
+            ckpt_path = CHECKPOINTS_DIR / f'checkpoint_epoch_{epoch}.pt'
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': transformer.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'scheduler_state_dict': scheduler.state_dict() if hasattr(scheduler, 'state_dict') else None,
+                'cfg': cfg,
+            }, ckpt_path)
+            print(f"Saved checkpoint: {ckpt_path}")
