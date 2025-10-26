@@ -11,3 +11,5 @@ sl = Speakleash(str(DATASETS_DIR))
 
 sl.get('1000_novels_corpus_CLARIN-PL').check_file()
 sl.get('wolne_lektury_corpus').check_file()
+sl.get('web_artykuły_inne_148').check_file()
+sl.get('web_artykuły_inne_147').check_file()
