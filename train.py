@@ -1,0 +1,84 @@
+import torch
+import wandb
+from torch.nn import CrossEntropyLoss
+from torch.utils.data import DataLoader
+from tqdm import tqdm
+from transformers import AutoTokenizer
+
+from transformer.dataset import SpeakLeashDataset, prepare_mask, ManualDataset
+from transformer.scheduler import TransformerLRScheduler
+from transformer.transformer import Transformer
+
+cfg = {
+    "max_len": 256,
+    "n_blocks": 6,
+    "num_heads": 12,
+    "d_model": 512,
+    "d_ff": 2048,
+    "log_freq": 5,
+    "prompt_log_freq": 5
+}
+
+
+tokenizer = AutoTokenizer.from_pretrained('Qwen/Qwen3-Embedding-0.6B')
+dataset = SpeakLeashDataset("datasets", tokenizer, max_len=64)
+dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
+
+transformer = Transformer(vocab_size=len(tokenizer), seq_len=64, n_blocks=1, num_heads=8, d_ff=256, d_model=64).to(
+    'cuda')
+loss_fn = CrossEntropyLoss(label_smoothing=0.1, ignore_index=-100).to('cuda')
+optimizer = torch.optim.Adam(transformer.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9)
+scheduler = TransformerLRScheduler(optimizer, d_model=64, warmup_steps=4000)
+
+
+test_data = [
+    "Pamięć nie jest linią prostą. To raczej labirynt, w którym echo jednego kroku potrafi niespodziewanie",
+    "Zapadło między nimi milczenie tak gęste, że można je było kroić nożem. Nie była to jednak cisza pusta – przeciwnie, była ona naładowana tym wszystkim, co",
+    "Z każdą chwilą kontury pokoju stawały się coraz mniej wyraźne. Nie był pewien, czy to zmęczenie, czy może",
+    "Obserwował swoje dłonie, jakby należały do kogoś zupełnie obcego. Widział, jak podnoszą filiżankę, jak obracają klucz w zamku, ale on sam znajdował się",
+    "Pustka nie była jedynie brakiem. Była substancją, ciężką i zimną, która osiadała na meblach"
+]
+
+test_dataset = ManualDataset(test_data, tokenizer, 64)
+test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False)
+
+columns = ["Epoch", "Input", "Output"]
+
+
+with wandb.init(config=cfg) as run:
+    table = wandb.Table(columns=columns, log_mode="INCREMENTAL")
+    run.watch(transformer, loss_fn, log_freq=10)
+
+    for epoch in tqdm(range(100)):
+        for item in tqdm(dataloader, leave=False):
+            mask = prepare_mask(item['attention_mask']).to('cuda')
+            inputs = item['input_ids'].to('cuda')
+            targets = item['labels'].to('cuda')
+
+            optimizer.zero_grad()
+
+            output = transformer(inputs, mask)
+            loss = loss_fn(output.view(-1, output.size(-1)), targets.view(-1))
+            loss.backward()
+
+            optimizer.step()
+            scheduler.step()
+
+        if epoch % cfg['log_freq'] == 0:
+            run.log({"Loss": loss.item(), "Perplexity": torch.exp(loss).item()}, step=epoch)
+
+        if epoch % cfg['prompt_log_freq'] == 0:
+            transformer.eval()
+
+
+            for text in test_dataloader:
+                inputs = text['input_ids'].to('cuda')
+                mask = prepare_mask(text['attention_mask']).to('cuda')
+                output = transformer(inputs, mask)
+                out_token_ids = torch.argmax(output, -1)
+                output_text = tokenizer.batch_decode(out_token_ids, skip_special_tokens=True)[0]
+                table.add_data(epoch, text['original_text'][0], output_text)
+
+            run.log({"Example outputs": table}, step=epoch)
+
+            transformer.train()
