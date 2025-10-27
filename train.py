@@ -97,7 +97,7 @@ acc = Accelerator(cpu=False, mixed_precision='bf16', log_with='wandb')
 acc.init_trackers(project_name=os.getenv('WANDB_PROJECT'), config=cfg)
 
 tokenizer = AutoTokenizer.from_pretrained('speakleash/Bielik-1.5B-v3')
-dataset = SpeakLeashDataset("datasets", tokenizer, max_len=16)
+dataset = SpeakLeashDataset("datasets", tokenizer, max_len=cfg["max_len"])
 dataloader = DataLoader(dataset, batch_size=cfg["batch_size"], shuffle=True)
 
 transformer = Transformer(vocab_size=len(tokenizer), seq_len=cfg["max_len"], n_blocks=cfg["n_blocks"], num_heads=cfg["num_heads"], d_ff=cfg["d_ff"], d_model=cfg["d_model"])
