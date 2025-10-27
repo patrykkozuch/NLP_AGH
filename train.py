@@ -1,6 +1,9 @@
 from pathlib import Path
 
 import torch
+from torch import autocast
+from torch.cuda.amp import GradScaler
+
 import wandb
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader
@@ -12,9 +15,9 @@ from transformer.scheduler import TransformerLRScheduler
 from transformer.transformer import Transformer
 
 cfg = {
-    "batch_size": 64,
+    "batch_size": 32,
     "max_len": 256,
-    "n_blocks": 4,
+    "n_blocks": 6,
     "num_heads": 8,
     "d_model": 256,
     "d_ff": 1024,
@@ -51,6 +54,7 @@ columns = ["Epoch", "Input", "Output"]
 CHECKPOINTS_DIR = Path('checkpoints')
 CHECKPOINTS_DIR.mkdir(parents=True, exist_ok=True)
 
+scaler = GradScaler()
 
 with wandb.init(config=cfg) as run:
     table = wandb.Table(columns=columns, log_mode="INCREMENTAL")
@@ -66,11 +70,13 @@ with wandb.init(config=cfg) as run:
 
             optimizer.zero_grad()
 
-            output = transformer(inputs, mask)
-            loss = loss_fn(output.view(-1, output.size(-1)), targets.view(-1))
-            loss.backward()
+            with autocast(device_type='cuda', dtype=torch.float16):
+                output = transformer(inputs, mask)
+                loss = loss_fn(output.view(-1, output.size(-1)), targets.view(-1))
+            scaler.scale(loss).backward()
 
-            optimizer.step()
+            scaler.step(optimizer)
+            scaler.update()
             scheduler.step()
 
         if epoch % cfg['log_freq'] == 0:
