@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import torch
@@ -93,7 +94,7 @@ cfg = {
 }
 
 acc = Accelerator(cpu=False, mixed_precision='bf16', log_with='wandb')
-acc.init_trackers(config=cfg)
+acc.init_trackers(project_name=os.getenv('WANDB_PROJECT'), config=cfg)
 
 tokenizer = AutoTokenizer.from_pretrained('gpt2', pad_token='<|endoftext|>')
 dataset = SpeakLeashDataset("datasets", tokenizer, max_len=16)
