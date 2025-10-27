@@ -66,9 +66,9 @@ with wandb.init(config=cfg) as run:
     transformer.train()
     for epoch in tqdm(range(cfg["epoches"])):
         for item in tqdm(dataloader, total=len(dataloader), leave=False):
-            mask = prepare_mask(item['attention_mask']).to(device)
-            inputs = item['input_ids'].to(device)
-            targets = item['labels'].to(device)
+            mask = prepare_mask(item['attention_mask'])
+            inputs = item['input_ids']
+            targets = item['labels']
 
             optimizer.zero_grad()
 
@@ -86,8 +86,8 @@ with wandb.init(config=cfg) as run:
             transformer.eval()
 
             for text in test_dataloader:
-                inputs = text['input_ids'].to(device)
-                mask = prepare_mask(text['attention_mask']).to(device)
+                inputs = text['input_ids']
+                mask = prepare_mask(text['attention_mask'])
                 output = transformer(inputs, mask)
                 out_token_ids = torch.argmax(output, -1)
                 output_text = tokenizer.batch_decode(out_token_ids, skip_special_tokens=True)[0]
