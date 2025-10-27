@@ -49,7 +49,6 @@ def chunk_text(text, tokenizer, chunk_size=512):
         attention_mask = [1] * (actual_length - 1) + [0] * padding_length
 
         chunks.append({
-            "original_text": tokenizer.decode(input_chunk, skip_special_tokens=True),
             "input_ids": torch.tensor(input_chunk, dtype=torch.long),
             "attention_mask": torch.tensor(attention_mask, dtype=torch.long),
             "labels": torch.tensor(label_chunk, dtype=torch.long)

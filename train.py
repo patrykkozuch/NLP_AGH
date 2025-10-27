@@ -98,7 +98,7 @@ acc.init_trackers(project_name=os.getenv('WANDB_PROJECT'), config=cfg)
 
 tokenizer = AutoTokenizer.from_pretrained('speakleash/Bielik-1.5B-v3')
 dataset = SpeakLeashDataset("datasets", tokenizer, max_len=cfg["max_len"])
-dataloader = DataLoader(dataset, batch_size=cfg["batch_size"], shuffle=True)
+dataloader = DataLoader(dataset, batch_size=cfg["batch_size"], shuffle=True, num_workers=4)
 
 transformer = Transformer(vocab_size=len(tokenizer), seq_len=cfg["max_len"], n_blocks=cfg["n_blocks"], num_heads=cfg["num_heads"], d_ff=cfg["d_ff"], d_model=cfg["d_model"])
 loss_fn = CrossEntropyLoss(label_smoothing=0.1, ignore_index=-100)
@@ -110,7 +110,17 @@ test_data = [
     "Zapadło między nimi milczenie tak gęste, że można je było kroić nożem. Nie była to jednak cisza pusta – przeciwnie, była ona naładowana tym wszystkim, co",
     "Z każdą chwilą kontury pokoju stawały się coraz mniej wyraźne. Nie był pewien, czy to zmęczenie, czy może",
     "Obserwował swoje dłonie, jakby należały do kogoś zupełnie obcego. Widział, jak podnoszą filiżankę, jak obracają klucz w zamku, ale on sam znajdował się",
-    "Pustka nie była jedynie brakiem. Była substancją, ciężką i zimną, która osiadała na meblach"
+    "Pustka nie była jedynie brakiem. Była substancją, ciężką i zimną, która osiadała na meblach",
+    "Światło lampy drżało lekko, jakby wahało się, czy pozostać. Cienie na ścianach zdawały się szeptać coś o tym, co",
+    "Powietrze w pokoju stało się ciężkie, niemal namacalne. Miał wrażenie, że każdy jego oddech prowadzi go coraz bliżej miejsca, gdzie",
+    "Zegar tykał z uporem, który wydawał się kpić z jego bezruchu. W każdej sekundzie kryło się coś, czego nie potrafił",
+    "Krople deszczu spływały po szybie, zlewając się w krzywe linie. Przez chwilę zobaczył w nich twarze tych, których",
+    "Ulica była pusta, choć miał pewność, że ktoś go obserwuje. Kroki odbijały się echem od kamieni, niosąc w sobie coś, co",
+    "Na dnie filiżanki został osad, ciemny jak noc bez gwiazd. Wpatrywała się w niego, jakby próbowała odczytać z niego to, czego",
+    "Zapach kurzu i starych książek otulał go niczym wspomnienie. Każda strona, którą przewracał, zdawała się przypominać mu o tym, że",
+    "Świat za oknem przesuwał się powoli, jak w starym filmie. Granica między tym, co pamiętał, a tym, co sobie wyobrażał, stawała się",
+    "Kiedy wypowiedziała jego imię, brzmiało ono inaczej niż kiedykolwiek wcześniej. W tym jednym słowie kryło się coś, co mogło wszystko",
+    "Na chwilę wydawało mu się, że zrozumiał. Lecz myśl wymknęła się, zanim zdążył ją pochwycić, pozostawiając po sobie tylko echo, które"
 ]
 
 test_dataset = ManualDataset(test_data, tokenizer, cfg["max_len"])
@@ -170,7 +180,7 @@ for epoch in tqdm(range(cfg["epoches"])):
                     device='cuda'
                 )
 
-                table.add_data(steps, text['original_text'][0], output_text[0])
+                table.add_data(steps, text, output_text[0])
 
             acc.log({"Example outputs": table}, step=steps)
 
