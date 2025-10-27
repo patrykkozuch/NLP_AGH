@@ -96,7 +96,7 @@ cfg = {
 acc = Accelerator(cpu=False, mixed_precision='bf16', log_with='wandb')
 acc.init_trackers(project_name=os.getenv('WANDB_PROJECT'), config=cfg)
 
-tokenizer = AutoTokenizer.from_pretrained('gpt2', pad_token='<|endoftext|>')
+tokenizer = AutoTokenizer.from_pretrained('speakleash/Bielik-1.5B-v3')
 dataset = SpeakLeashDataset("datasets", tokenizer, max_len=16)
 dataloader = DataLoader(dataset, batch_size=cfg["batch_size"], shuffle=True)
 

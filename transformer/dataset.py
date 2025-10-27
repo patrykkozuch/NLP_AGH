@@ -12,8 +12,6 @@ from transformers import AutoTokenizer
 
 
 def chunk_text(text, tokenizer, chunk_size=512):
-    chunk_size += 1
-
     tokens = tokenizer(
         text,
         add_special_tokens=False,
@@ -29,7 +27,7 @@ def chunk_text(text, tokenizer, chunk_size=512):
     chunks = []
 
     for start in range(0, len(input_ids), chunk_size):
-        chunk_ids = input_ids[start:start + chunk_size]
+        chunk_ids = [tokenizer.bos_token_id] + input_ids[start:start + chunk_size]
 
         if len(chunk_ids) < 2:
             continue
