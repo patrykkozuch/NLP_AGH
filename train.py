@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import torch
-import torch.nn as nn
 import wandb
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader
@@ -41,9 +40,6 @@ loss_fn = CrossEntropyLoss(label_smoothing=0.1, ignore_index=-100)
 optimizer = torch.optim.Adam(transformer.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9)
 scheduler = TransformerLRScheduler(optimizer, d_model=cfg["d_model"], warmup_steps=4000)
 
-transformer, optimizer, dataloader = accelerator.prepare(transformer, optimizer, dataloader)
-
-
 test_data = [
     "Pamięć nie jest linią prostą. To raczej labirynt, w którym echo jednego kroku potrafi niespodziewanie",
     "Zapadło między nimi milczenie tak gęste, że można je było kroić nożem. Nie była to jednak cisza pusta – przeciwnie, była ona naładowana tym wszystkim, co",
@@ -54,6 +50,8 @@ test_data = [
 
 test_dataset = ManualDataset(test_data, tokenizer, cfg["max_len"])
 test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False)
+
+transformer, optimizer, dataloader, test_dataloader = accelerator.prepare(transformer, optimizer, dataloader, test_dataloader)
 
 columns = ["Epoch", "Input", "Output"]
 
