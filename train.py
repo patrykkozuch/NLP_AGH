@@ -14,6 +14,75 @@ from transformer.dataset import SpeakLeashDataset, prepare_mask, ManualDataset
 from transformer.scheduler import TransformerLRScheduler
 from transformer.transformer import Transformer
 
+
+def complete_sentence(model, input_ids, attention_mask, tokenizer, max_new_tokens=10, device='cuda'):
+    """
+    Complete a sentence by generating tokens autoregressively.
+
+    Args:
+        model: Transformer model
+        input_ids: Input token IDs (batch_size, seq_len)
+        attention_mask: Attention mask (batch_size, seq_len)
+        tokenizer: Tokenizer
+        max_new_tokens: Maximum number of tokens to generate
+        device: Device to run on
+
+    Returns:
+        completed_tokens: Generated token IDs
+        completed_text: Decoded text
+    """
+    model.eval()
+
+    # Clone input to avoid modifying original
+    current_ids = input_ids.clone()
+    current_mask = attention_mask.clone()
+    seq_len = input_ids.size(1)
+
+    generated_tokens = []
+
+    with torch.no_grad():
+        for _ in range(max_new_tokens):
+            # Get prediction for the entire sequence
+            mask = prepare_mask(current_mask).to(device)
+            output = model(current_ids, mask)  # (batch, seq_len, vocab_size)
+
+            # Get prediction for the last real token position
+            # Find last non-padded position
+            real_positions = (current_mask == 1).long()
+            last_real_idx = real_positions.sum(dim=1) - 1  # (batch_size,)
+            batch_indices = torch.arange(current_ids.size(0), device=device)
+
+            # Get logits for last position of each sample in batch
+            next_token_logits = output[batch_indices, last_real_idx]  # (batch_size, vocab_size)
+
+            # Sample next token (take argmax for deterministic generation)
+            next_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)  # (batch_size, 1)
+            generated_tokens.append(next_token)
+
+            # Check if we reached end-of-sequence token
+            if (next_token == tokenizer.eos_token_id).all():
+                break
+
+            # Append next token to sequence
+            current_ids = torch.cat([current_ids, next_token], dim=1)
+
+            # Update attention mask
+            new_mask = torch.ones_like(next_token)
+            current_mask = torch.cat([current_mask, new_mask], dim=1)
+
+    # Concatenate all generated tokens
+    if generated_tokens:
+        all_generated = torch.cat(generated_tokens, dim=1)  # (batch_size, num_generated)
+        completed_ids = torch.cat([input_ids, all_generated], dim=1)
+    else:
+        completed_ids = input_ids
+
+    # Decode to text
+    completed_text = tokenizer.batch_decode(completed_ids, skip_special_tokens=True)
+
+    return completed_ids, completed_text
+
+
 cfg = {
     "batch_size": 32,
     "max_len": 256,
@@ -29,7 +98,7 @@ cfg = {
 
 
 tokenizer = AutoTokenizer.from_pretrained('Qwen/Qwen3-Embedding-0.6B')
-dataset = SpeakLeashDataset("datasets", tokenizer, max_len=cfg["max_len"])
+dataset = SpeakLeashDataset("datasets", tokenizer, max_len=16)
 dataloader = DataLoader(dataset, batch_size=cfg["batch_size"], shuffle=True)
 
 transformer = Transformer(vocab_size=len(tokenizer), seq_len=cfg["max_len"], n_blocks=cfg["n_blocks"], num_heads=cfg["num_heads"], d_ff=cfg["d_ff"], d_model=cfg["d_model"]).to('cuda')
@@ -88,11 +157,19 @@ with wandb.init(config=cfg) as run:
 
                 for text in test_dataloader:
                     inputs = text['input_ids'].to('cuda')
-                    mask = prepare_mask(text['attention_mask']).to('cuda')
-                    output = transformer(inputs, mask)
-                    out_token_ids = torch.argmax(output, -1)
-                    output_text = tokenizer.batch_decode(out_token_ids, skip_special_tokens=True)[0]
-                    table.add_data(steps, text['original_text'][0], output_text)
+                    attention_mask = text['attention_mask'].to('cuda')
+
+                    # Complete the sentence
+                    _, output_text = complete_sentence(
+                        transformer,
+                        inputs,
+                        attention_mask,
+                        tokenizer,
+                        max_new_tokens=15,
+                        device='cuda'
+                    )
+
+                    table.add_data(steps, text['original_text'][0], output_text[0])
 
                 run.log({"Example outputs": table}, step=steps)
 

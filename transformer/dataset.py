@@ -104,7 +104,14 @@ class ManualDataset(Dataset):
 
 
 def prepare_mask(attention_mask: torch.Tensor) -> torch.Tensor:
-    attention_mask = attention_mask.bool().unsqueeze(1).unsqueeze(3)
-    size = attention_mask.size(1)
-    causal_mask = torch.tril(torch.ones(size, size)).bool().to(attention_mask.device)
-    return causal_mask & attention_mask
+    batch_size, seq_len = attention_mask.shape
+    device = attention_mask.device
+
+    causal_mask = torch.triu(torch.ones(seq_len, seq_len, device=device), diagonal=1).bool()
+
+    padding_mask = ~attention_mask.bool()
+
+    combined_mask = causal_mask.unsqueeze(0) | padding_mask.unsqueeze(2)
+    combined_mask = combined_mask.unsqueeze(1)
+
+    return combined_mask
