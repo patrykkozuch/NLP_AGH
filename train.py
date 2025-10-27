@@ -12,6 +12,8 @@ from transformer.dataset import SpeakLeashDataset, prepare_mask, ManualDataset
 from transformer.scheduler import TransformerLRScheduler
 from transformer.transformer import Transformer
 
+from accelerate import Accelerator
+
 cfg = {
     "batch_size": 128,
     "max_len": 512,
@@ -30,15 +32,16 @@ tokenizer = AutoTokenizer.from_pretrained('Qwen/Qwen3-Embedding-0.6B')
 dataset = SpeakLeashDataset("datasets", tokenizer, max_len=cfg["max_len"])
 dataloader = DataLoader(dataset, batch_size=cfg["batch_size"], shuffle=True)
 
+accelerator = Accelerator()
+device = accelerator.device
+
 transformer = Transformer(vocab_size=len(tokenizer), seq_len=cfg["max_len"], n_blocks=cfg["n_blocks"], num_heads=cfg["num_heads"], d_ff=cfg["d_ff"], d_model=cfg["d_model"])
-if torch.cuda.device_count() > 1:
-    transformer = nn.DataParallel(transformer)
 
-transformer = transformer.to('cuda')
-
-loss_fn = CrossEntropyLoss(label_smoothing=0.1, ignore_index=-100).to('cuda')
+loss_fn = CrossEntropyLoss(label_smoothing=0.1, ignore_index=-100)
 optimizer = torch.optim.Adam(transformer.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9)
 scheduler = TransformerLRScheduler(optimizer, d_model=cfg["d_model"], warmup_steps=4000)
+
+transformer, optimizer, dataloader = accelerator.prepare(transformer, optimizer, dataloader)
 
 
 test_data = [
@@ -62,17 +65,18 @@ with wandb.init(config=cfg) as run:
     table = wandb.Table(columns=columns, log_mode="INCREMENTAL")
     run.watch(transformer, loss_fn, log_freq=10)
 
+    transformer.train()
     for epoch in tqdm(range(cfg["epoches"])):
         for item in tqdm(dataloader, total=len(dataloader), leave=False):
-            mask = prepare_mask(item['attention_mask']).to('cuda')
-            inputs = item['input_ids'].to('cuda')
-            targets = item['labels'].to('cuda')
+            mask = prepare_mask(item['attention_mask']).to(device)
+            inputs = item['input_ids'].to(device)
+            targets = item['labels'].to(device)
 
             optimizer.zero_grad()
 
             output = transformer(inputs, mask)
             loss = loss_fn(output.view(-1, output.size(-1)), targets.view(-1))
-            loss.backward()
+            accelerator.backward(loss)
 
             optimizer.step()
             scheduler.step()
@@ -84,8 +88,8 @@ with wandb.init(config=cfg) as run:
             transformer.eval()
 
             for text in test_dataloader:
-                inputs = text['input_ids'].to('cuda')
-                mask = prepare_mask(text['attention_mask']).to('cuda')
+                inputs = text['input_ids'].to(device)
+                mask = prepare_mask(text['attention_mask']).to(device)
                 output = transformer(inputs, mask)
                 out_token_ids = torch.argmax(output, -1)
                 output_text = tokenizer.batch_decode(out_token_ids, skip_special_tokens=True)[0]
