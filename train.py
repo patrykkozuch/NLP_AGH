@@ -16,7 +16,7 @@ from transformer.transformer import Transformer
 
 cfg = {
     "batch_size": 32,
-    "max_len": 512,
+    "max_len": 256,
     "n_blocks": 6,
     "num_heads": 8,
     "d_model": 256,
