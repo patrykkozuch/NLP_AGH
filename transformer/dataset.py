@@ -14,7 +14,7 @@ from transformers import AutoTokenizer
 def chunk_text(text, tokenizer, chunk_size=512):
     tokens = tokenizer(
         text,
-        add_special_tokens=False,
+        add_special_tokens=True,
         truncation=False,
         return_tensors=None
     )
@@ -27,7 +27,7 @@ def chunk_text(text, tokenizer, chunk_size=512):
     chunks = []
 
     for start in range(0, len(input_ids), chunk_size):
-        chunk_ids = [tokenizer.bos_token_id] + input_ids[start:start + chunk_size]
+        chunk_ids = input_ids[start:start + chunk_size]
 
         if len(chunk_ids) < 2:
             continue
@@ -38,7 +38,7 @@ def chunk_text(text, tokenizer, chunk_size=512):
         label_chunk = chunk_ids[1:]  # All except first
 
         # Pad to chunk_size - 1 (since we removed one token for shifting)
-        max_len = chunk_size - 1
+        max_len = chunk_size
         padding_length = max_len - len(input_chunk)
 
         if padding_length > 0:
