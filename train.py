@@ -103,7 +103,7 @@ dataloader = DataLoader(dataset, batch_size=cfg["batch_size"], shuffle=True, num
 
 transformer = Transformer(vocab_size=len(tokenizer), seq_len=cfg["max_len"], n_blocks=cfg["n_blocks"], num_heads=cfg["num_heads"], d_ff=cfg["d_ff"], d_model=cfg["d_model"])
 loss_fn = CrossEntropyLoss(label_smoothing=0.1, ignore_index=-100)
-optimizer = torch.optim.Adam(transformer.parameters(), lr=1e-3)
+optimizer = torch.optim.Adam(transformer.parameters(), lr=3e-4)
 scheduler = CosineAnnealingLR(optimizer, cfg["epoches"])
 
 test_data = [
