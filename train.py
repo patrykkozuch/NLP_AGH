@@ -16,15 +16,15 @@ from transformer.transformer import Transformer
 
 cfg = {
     "batch_size": 32,
-    "max_len": 256,
+    "max_len": 512,
     "n_blocks": 6,
     "num_heads": 8,
     "d_model": 256,
     "d_ff": 1024,
-    "log_freq": 10,
-    "prompt_log_freq": 10,
-    "epoches": 1000,
-    "chkpoint_freq": 50
+    "log_freq": 1000,
+    "prompt_log_freq": 5000,
+    "epoches": 100,
+    "chkpoint_freq": 5000
 }
 
 
@@ -49,13 +49,14 @@ test_data = [
 test_dataset = ManualDataset(test_data, tokenizer, cfg["max_len"])
 test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
-columns = ["Epoch", "Input", "Output"]
+columns = ["Steps", "Input", "Output"]
 
 CHECKPOINTS_DIR = Path('checkpoints')
 CHECKPOINTS_DIR.mkdir(parents=True, exist_ok=True)
 
 scaler = GradScaler()
 
+steps = 0
 with wandb.init(config=cfg) as run:
     table = wandb.Table(columns=columns, log_mode="INCREMENTAL")
     run.watch(transformer, loss_fn, log_freq=10)
@@ -79,10 +80,10 @@ with wandb.init(config=cfg) as run:
             scaler.update()
             scheduler.step()
 
-        if epoch % cfg['log_freq'] == 0:
-            run.log({"Loss": loss.item(), "Perplexity": torch.exp(loss).item()}, step=epoch)
+        if steps % cfg['log_freq'] == 0:
+            run.log({"Loss": loss.item(), "Perplexity": torch.exp(loss).item()}, step=steps)
 
-        if epoch % cfg['prompt_log_freq'] == 0:
+        if steps % cfg['prompt_log_freq'] == 0:
             transformer.eval()
 
             for text in test_dataloader:
@@ -91,19 +92,21 @@ with wandb.init(config=cfg) as run:
                 output = transformer(inputs, mask)
                 out_token_ids = torch.argmax(output, -1)
                 output_text = tokenizer.batch_decode(out_token_ids, skip_special_tokens=True)[0]
-                table.add_data(epoch, text['original_text'][0], output_text)
+                table.add_data(steps, text['original_text'][0], output_text)
 
-            run.log({"Example outputs": table}, step=epoch)
+            run.log({"Example outputs": table}, step=steps)
 
             transformer.train()
 
-        if epoch % cfg["chkpoint_freq"] == 0:
+        if steps % cfg["chkpoint_freq"] == 0:
 
-            ckpt_path = CHECKPOINTS_DIR / f'checkpoint_epoch_{epoch}.pt'
+            ckpt_path = CHECKPOINTS_DIR / f'checkpoint_epoch_{steps}.pt'
             torch.save({
-                'epoch': epoch,
+                'steps': steps,
                 'model_state_dict': transformer.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'scheduler_state_dict': scheduler.state_dict() if hasattr(scheduler, 'state_dict') else None,
                 'cfg': cfg,
             }, ckpt_path)
+
+        steps += 1
