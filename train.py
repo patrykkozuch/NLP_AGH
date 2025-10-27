@@ -12,27 +12,27 @@ from transformer.scheduler import TransformerLRScheduler
 from transformer.transformer import Transformer
 
 cfg = {
-    "max_len": 256,
+    "batch_size": 128,
+    "max_len": 512,
     "n_blocks": 6,
-    "num_heads": 12,
+    "num_heads": 8,
     "d_model": 512,
     "d_ff": 2048,
-    "log_freq": 5,
-    "prompt_log_freq": 5,
+    "log_freq": 10,
+    "prompt_log_freq": 10,
     "epoches": 1000,
-    "chkpoint_freq": 25
+    "chkpoint_freq": 50
 }
 
 
 tokenizer = AutoTokenizer.from_pretrained('Qwen/Qwen3-Embedding-0.6B')
-dataset = SpeakLeashDataset("datasets", tokenizer, max_len=64)
-dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
+dataset = SpeakLeashDataset("datasets", tokenizer, max_len=cfg["max_len"])
+dataloader = DataLoader(dataset, batch_size=cfg["batch_size"], shuffle=True)
 
-transformer = Transformer(vocab_size=len(tokenizer), seq_len=64, n_blocks=1, num_heads=8, d_ff=256, d_model=64).to(
-    'cuda')
+transformer = Transformer(vocab_size=len(tokenizer), seq_len=cfg["max_len"], n_blocks=cfg["n_blocks"], num_heads=cfg["num_heads"], d_ff=cfg["d_ff"], d_model=cfg["d_model"]).to('cuda')
 loss_fn = CrossEntropyLoss(label_smoothing=0.1, ignore_index=-100).to('cuda')
 optimizer = torch.optim.Adam(transformer.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9)
-scheduler = TransformerLRScheduler(optimizer, d_model=64, warmup_steps=4000)
+scheduler = TransformerLRScheduler(optimizer, d_model=cfg["d_model"], warmup_steps=4000)
 
 
 test_data = [
@@ -43,7 +43,7 @@ test_data = [
     "Pustka nie była jedynie brakiem. Była substancją, ciężką i zimną, która osiadała na meblach"
 ]
 
-test_dataset = ManualDataset(test_data, tokenizer, 64)
+test_dataset = ManualDataset(test_data, tokenizer, cfg["max_len"])
 test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
 columns = ["Epoch", "Input", "Output"]
@@ -56,7 +56,7 @@ with wandb.init(config=cfg) as run:
     table = wandb.Table(columns=columns, log_mode="INCREMENTAL")
     run.watch(transformer, loss_fn, log_freq=10)
 
-    for epoch in tqdm(range(100)):
+    for epoch in tqdm(range(cfg["epoches"])):
         for item in tqdm(dataloader, total=len(dataloader), leave=False):
             mask = prepare_mask(item['attention_mask']).to('cuda')
             inputs = item['input_ids'].to('cuda')
@@ -99,4 +99,3 @@ with wandb.init(config=cfg) as run:
                 'scheduler_state_dict': scheduler.state_dict() if hasattr(scheduler, 'state_dict') else None,
                 'cfg': cfg,
             }, ckpt_path)
-            print(f"Saved checkpoint: {ckpt_path}")
