@@ -80,33 +80,33 @@ with wandb.init(config=cfg) as run:
             scaler.update()
             scheduler.step()
 
-        if steps % cfg['log_freq'] == 0:
-            run.log({"Loss": loss.item(), "Perplexity": torch.exp(loss).item()}, step=steps)
+            if steps % cfg['log_freq'] == 0:
+                run.log({"Loss": loss.item(), "Perplexity": torch.exp(loss).item()}, step=steps)
 
-        if steps % cfg['prompt_log_freq'] == 0:
-            transformer.eval()
+            if steps % cfg['prompt_log_freq'] == 0:
+                transformer.eval()
 
-            for text in test_dataloader:
-                inputs = text['input_ids'].to('cuda')
-                mask = prepare_mask(text['attention_mask']).to('cuda')
-                output = transformer(inputs, mask)
-                out_token_ids = torch.argmax(output, -1)
-                output_text = tokenizer.batch_decode(out_token_ids, skip_special_tokens=True)[0]
-                table.add_data(steps, text['original_text'][0], output_text)
+                for text in test_dataloader:
+                    inputs = text['input_ids'].to('cuda')
+                    mask = prepare_mask(text['attention_mask']).to('cuda')
+                    output = transformer(inputs, mask)
+                    out_token_ids = torch.argmax(output, -1)
+                    output_text = tokenizer.batch_decode(out_token_ids, skip_special_tokens=True)[0]
+                    table.add_data(steps, text['original_text'][0], output_text)
 
-            run.log({"Example outputs": table}, step=steps)
+                run.log({"Example outputs": table}, step=steps)
 
-            transformer.train()
+                transformer.train()
 
-        if steps % cfg["chkpoint_freq"] == 0:
+            if steps % cfg["chkpoint_freq"] == 0:
 
-            ckpt_path = CHECKPOINTS_DIR / f'checkpoint_epoch_{steps}.pt'
-            torch.save({
-                'steps': steps,
-                'model_state_dict': transformer.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'scheduler_state_dict': scheduler.state_dict() if hasattr(scheduler, 'state_dict') else None,
-                'cfg': cfg,
-            }, ckpt_path)
+                ckpt_path = CHECKPOINTS_DIR / f'checkpoint_epoch_{steps}.pt'
+                torch.save({
+                    'steps': steps,
+                    'model_state_dict': transformer.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'scheduler_state_dict': scheduler.state_dict() if hasattr(scheduler, 'state_dict') else None,
+                    'cfg': cfg,
+                }, ckpt_path)
 
-        steps += 1
+            steps += 1
