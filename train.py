@@ -149,11 +149,8 @@ for epoch in tqdm(range(cfg["epoches"])):
 
         output = transformer(inputs, mask)
         loss = loss_fn(output.view(-1, output.size(-1)), targets.view(-1))
-
-        if acc.sync_gradients:
-            acc.clip_grad_norm_(transformer.parameters(), 1.0)
-
         acc.backward(loss)
+        acc.clip_grad_norm_(transformer.parameters(), 1.0)
 
         optimizer.step()
 
