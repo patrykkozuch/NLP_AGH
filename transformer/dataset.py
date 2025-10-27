@@ -106,5 +106,5 @@ class ManualDataset(Dataset):
 def prepare_mask(attention_mask: torch.Tensor) -> torch.Tensor:
     attention_mask = attention_mask.bool().unsqueeze(1).unsqueeze(3)
     size = attention_mask.size(1)
-    causal_mask = torch.triu(torch.ones(size, size), diagonal=1).bool().to(attention_mask.device)
+    causal_mask = torch.tril(torch.ones(size, size)).bool().to(attention_mask.device)
     return causal_mask & attention_mask
