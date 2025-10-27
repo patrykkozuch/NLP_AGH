@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import torch
+import torch.nn as nn
 import wandb
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader
@@ -29,7 +30,12 @@ tokenizer = AutoTokenizer.from_pretrained('Qwen/Qwen3-Embedding-0.6B')
 dataset = SpeakLeashDataset("datasets", tokenizer, max_len=cfg["max_len"])
 dataloader = DataLoader(dataset, batch_size=cfg["batch_size"], shuffle=True)
 
-transformer = Transformer(vocab_size=len(tokenizer), seq_len=cfg["max_len"], n_blocks=cfg["n_blocks"], num_heads=cfg["num_heads"], d_ff=cfg["d_ff"], d_model=cfg["d_model"]).to('cuda')
+transformer = Transformer(vocab_size=len(tokenizer), seq_len=cfg["max_len"], n_blocks=cfg["n_blocks"], num_heads=cfg["num_heads"], d_ff=cfg["d_ff"], d_model=cfg["d_model"])
+if torch.cuda.device_count() > 1:
+    transformer = nn.DataParallel(transformer)
+
+transformer = transformer.to('cuda')
+
 loss_fn = CrossEntropyLoss(label_smoothing=0.1, ignore_index=-100).to('cuda')
 optimizer = torch.optim.Adam(transformer.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9)
 scheduler = TransformerLRScheduler(optimizer, d_model=cfg["d_model"], warmup_steps=4000)
