@@ -1,8 +1,7 @@
 from pathlib import Path
 
 import torch
-from torch import autocast
-from torch.cuda.amp import GradScaler
+from accelerate import Accelerator
 
 import wandb
 from torch.nn import CrossEntropyLoss
@@ -81,28 +80,28 @@ def complete_sentence(model, input_ids, attention_mask, tokenizer, max_new_token
 
 
 cfg = {
-    "batch_size": 32,
-    "max_len": 384,
+    "batch_size": 64,
+    "max_len": 256,
     "n_blocks": 6,
     "num_heads": 8,
-    "d_model": 256,
-    "d_ff": 1024,
+    "d_model": 512,
+    "d_ff": 2048,
     "log_freq": 1000,
     "prompt_log_freq": 5000,
     "epoches": 100,
     "chkpoint_freq": 5000
 }
 
+acc = Accelerator(cpu=False, mixed_precision='fp16')
 
-tokenizer = AutoTokenizer.from_pretrained('Qwen/Qwen3-Embedding-0.6B')
+tokenizer = AutoTokenizer.from_pretrained('gpt2', pad_token='<|endoftext|>')
 dataset = SpeakLeashDataset("datasets", tokenizer, max_len=16)
 dataloader = DataLoader(dataset, batch_size=cfg["batch_size"], shuffle=True)
 
-transformer = Transformer(vocab_size=len(tokenizer), seq_len=cfg["max_len"], n_blocks=cfg["n_blocks"], num_heads=cfg["num_heads"], d_ff=cfg["d_ff"], d_model=cfg["d_model"]).to('cuda')
-loss_fn = CrossEntropyLoss(label_smoothing=0.1, ignore_index=-100).to('cuda')
+transformer = Transformer(vocab_size=len(tokenizer), seq_len=cfg["max_len"], n_blocks=cfg["n_blocks"], num_heads=cfg["num_heads"], d_ff=cfg["d_ff"], d_model=cfg["d_model"])
+loss_fn = CrossEntropyLoss(label_smoothing=0.1, ignore_index=-100)
 optimizer = torch.optim.Adam(transformer.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9)
 scheduler = TransformerLRScheduler(optimizer, d_model=cfg["d_model"], warmup_steps=4000)
-
 
 test_data = [
     "Pamięć nie jest linią prostą. To raczej labirynt, w którym echo jednego kroku potrafi niespodziewanie",
@@ -120,7 +119,7 @@ columns = ["Steps", "Input", "Output"]
 CHECKPOINTS_DIR = Path('checkpoints')
 CHECKPOINTS_DIR.mkdir(parents=True, exist_ok=True)
 
-scaler = GradScaler()
+transformer, loss_fn, optimizer, dataloader, test_dataloader = acc.prepare(transformer, loss_fn, optimizer, dataloader, test_dataloader)
 
 steps = 0
 with wandb.init(config=cfg) as run:
@@ -131,30 +130,35 @@ with wandb.init(config=cfg) as run:
 
     for epoch in tqdm(range(cfg["epoches"])):
         for item in tqdm(dataloader, total=len(dataloader), leave=False):
-            mask = prepare_mask(item['attention_mask']).to('cuda')
-            inputs = item['input_ids'].to('cuda')
-            targets = item['labels'].to('cuda')
+            mask = prepare_mask(item['attention_mask'])
+            inputs = item['input_ids']
+            targets = item['labels']
 
             optimizer.zero_grad()
 
-            with autocast(device_type='cuda', dtype=torch.float16):
-                output = transformer(inputs, mask)
-                loss = loss_fn(output.view(-1, output.size(-1)), targets.view(-1))
-            scaler.scale(loss).backward()
+            output = transformer(inputs, mask)
+            loss = loss_fn(output.view(-1, output.size(-1)), targets.view(-1))
+            acc.backward(loss)
 
-            scaler.step(optimizer)
-            scaler.update()
+            optimizer.step()
             scheduler.step()
 
             if steps % cfg['log_freq'] == 0:
-                run.log({"Loss": loss.item(), "Perplexity": torch.exp(loss).item()}, step=steps)
+                run.log(
+                    data={
+                        "Loss": loss.item(),
+                        "Perplexity": torch.exp(loss).item(),
+                        "Learning rate": scheduler.get_last_lr()[0]
+                    },
+                    step=steps
+                )
 
             if steps % cfg['prompt_log_freq'] == 0:
                 transformer.eval()
 
                 for text in test_dataloader:
-                    inputs = text['input_ids'].to('cuda')
-                    attention_mask = text['attention_mask'].to('cuda')
+                    inputs = text['input_ids']
+                    attention_mask = text['attention_mask']
 
                     # Complete the sentence
                     _, output_text = complete_sentence(

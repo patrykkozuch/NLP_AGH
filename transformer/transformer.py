@@ -16,7 +16,7 @@ class Decoder(nn.Module):
         self.ln_ff = nn.LayerNorm(d_model)
         self.ff = nn.Sequential(
             nn.Linear(d_model, d_ff),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Linear(d_ff, d_model)
         )
 
