@@ -15,11 +15,11 @@ from accelerate import Accelerator
 
 cfg = {
     "batch_size": 64,
-    "max_len": 512,
+    "max_len": 256,
     "n_blocks": 6,
     "num_heads": 8,
-    "d_model": 512,
-    "d_ff": 2048,
+    "d_model": 256,
+    "d_ff": 1024,
     "log_freq": 10,
     "prompt_log_freq": 10,
     "epoches": 1000,
