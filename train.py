@@ -15,7 +15,7 @@ from transformer.scheduler import TransformerLRScheduler
 from transformer.transformer import Transformer
 
 
-def complete_sentence(model, input_ids, attention_mask, tokenizer, max_new_tokens=10, device='cuda'):
+def complete_sentence(model, input_ids, attention_mask, tokenizer, max_new_tokens=64, device='cuda'):
     """
     Complete a sentence by generating tokens autoregressively.
 
@@ -36,8 +36,6 @@ def complete_sentence(model, input_ids, attention_mask, tokenizer, max_new_token
     # Clone input to avoid modifying original
     current_ids = input_ids.clone()
     current_mask = attention_mask.clone()
-    seq_len = input_ids.size(1)
-
     generated_tokens = []
 
     with torch.no_grad():
@@ -64,11 +62,11 @@ def complete_sentence(model, input_ids, attention_mask, tokenizer, max_new_token
                 break
 
             # Append next token to sequence
-            current_ids = torch.cat([current_ids, next_token], dim=1)
-
+            last_real_idx += 1
+            current_ids = torch.cat([current_ids[:, :last_real_idx], next_token, current_ids[:, last_real_idx:-1]], dim=1)
             # Update attention mask
             new_mask = torch.ones_like(next_token)
-            current_mask = torch.cat([current_mask, new_mask], dim=1)
+            current_mask = torch.cat([current_mask[:, :last_real_idx], new_mask, current_ids[:, last_real_idx:-1]], dim=1)
 
     # Concatenate all generated tokens
     if generated_tokens:
@@ -79,13 +77,12 @@ def complete_sentence(model, input_ids, attention_mask, tokenizer, max_new_token
 
     # Decode to text
     completed_text = tokenizer.batch_decode(completed_ids, skip_special_tokens=True)
-
     return completed_ids, completed_text
 
 
 cfg = {
     "batch_size": 32,
-    "max_len": 256,
+    "max_len": 384,
     "n_blocks": 6,
     "num_heads": 8,
     "d_model": 256,
@@ -165,7 +162,7 @@ with wandb.init(config=cfg) as run:
                         inputs,
                         attention_mask,
                         tokenizer,
-                        max_new_tokens=15,
+                        max_new_tokens=128,
                         device='cuda'
                     )
 
