@@ -92,7 +92,8 @@ cfg = {
     "chkpoint_freq": 5000
 }
 
-acc = Accelerator(cpu=False, mixed_precision='fp16')
+acc = Accelerator(cpu=False, mixed_precision='bf16', log_with='wandb')
+acc.init_trackers(config=cfg)
 
 tokenizer = AutoTokenizer.from_pretrained('gpt2', pad_token='<|endoftext|>')
 dataset = SpeakLeashDataset("datasets", tokenizer, max_len=16)
@@ -122,69 +123,67 @@ CHECKPOINTS_DIR.mkdir(parents=True, exist_ok=True)
 transformer, loss_fn, optimizer, dataloader, test_dataloader = acc.prepare(transformer, loss_fn, optimizer, dataloader, test_dataloader)
 
 steps = 0
-with wandb.init(config=cfg) as run:
-    table = wandb.Table(columns=columns, log_mode="INCREMENTAL")
-    run.watch(transformer, loss_fn, log_freq=10)
+table = wandb.Table(columns=columns, log_mode="INCREMENTAL")
 
-    transformer.train()
+transformer.train()
 
-    for epoch in tqdm(range(cfg["epoches"])):
-        for item in tqdm(dataloader, total=len(dataloader), leave=False):
-            mask = prepare_mask(item['attention_mask'])
-            inputs = item['input_ids']
-            targets = item['labels']
+for epoch in tqdm(range(cfg["epoches"])):
+    for item in tqdm(dataloader, total=len(dataloader), leave=False):
+        mask = prepare_mask(item['attention_mask'])
+        inputs = item['input_ids']
+        targets = item['labels']
 
-            optimizer.zero_grad()
+        optimizer.zero_grad()
 
-            output = transformer(inputs, mask)
-            loss = loss_fn(output.view(-1, output.size(-1)), targets.view(-1))
-            acc.backward(loss)
+        output = transformer(inputs, mask)
+        loss = loss_fn(output.view(-1, output.size(-1)), targets.view(-1))
+        acc.backward(loss)
 
-            optimizer.step()
-            scheduler.step()
+        optimizer.step()
+        scheduler.step()
 
-            if steps % cfg['log_freq'] == 0:
-                run.log(
-                    data={
-                        "Loss": loss.item(),
-                        "Perplexity": torch.exp(loss).item(),
-                        "Learning rate": scheduler.get_last_lr()[0]
-                    },
-                    step=steps
+        if steps % cfg['log_freq'] == 0:
+            acc.log(
+                values={
+                    "Loss": loss,
+                    "Perplexity": torch.exp(loss),
+                    "Learning rate": scheduler.get_last_lr()[0]
+                },
+                step=steps
+            )
+
+        if steps % cfg['prompt_log_freq'] == 0:
+            transformer.eval()
+
+            for text in test_dataloader:
+                inputs = text['input_ids']
+                attention_mask = text['attention_mask']
+
+                # Complete the sentence
+                _, output_text = complete_sentence(
+                    transformer,
+                    inputs,
+                    attention_mask,
+                    tokenizer,
+                    max_new_tokens=128,
+                    device='cuda'
                 )
 
-            if steps % cfg['prompt_log_freq'] == 0:
-                transformer.eval()
+                table.add_data(steps, text['original_text'][0], output_text[0])
 
-                for text in test_dataloader:
-                    inputs = text['input_ids']
-                    attention_mask = text['attention_mask']
+            acc.log({"Example outputs": table}, step=steps)
 
-                    # Complete the sentence
-                    _, output_text = complete_sentence(
-                        transformer,
-                        inputs,
-                        attention_mask,
-                        tokenizer,
-                        max_new_tokens=128,
-                        device='cuda'
-                    )
+            transformer.train()
 
-                    table.add_data(steps, text['original_text'][0], output_text[0])
+        if steps % cfg["chkpoint_freq"] == 0:
 
-                run.log({"Example outputs": table}, step=steps)
+            ckpt_path = CHECKPOINTS_DIR / f'checkpoint_epoch_{steps}.pt'
+            torch.save({
+                'steps': steps,
+                'model_state_dict': transformer.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'scheduler_state_dict': scheduler.state_dict() if hasattr(scheduler, 'state_dict') else None,
+                'cfg': cfg,
+            }, ckpt_path)
 
-                transformer.train()
-
-            if steps % cfg["chkpoint_freq"] == 0:
-
-                ckpt_path = CHECKPOINTS_DIR / f'checkpoint_epoch_{steps}.pt'
-                torch.save({
-                    'steps': steps,
-                    'model_state_dict': transformer.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'scheduler_state_dict': scheduler.state_dict() if hasattr(scheduler, 'state_dict') else None,
-                    'cfg': cfg,
-                }, ckpt_path)
-
-            steps += 1
+        steps += 1
