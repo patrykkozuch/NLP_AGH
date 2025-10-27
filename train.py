@@ -166,7 +166,7 @@ for epoch in tqdm(range(cfg["epoches"])):
         if steps % cfg['prompt_log_freq'] == 0:
             transformer.eval()
 
-            for i, text in enumerate(test_dataloader):
+            for text in test_dataloader:
                 inputs = text['input_ids']
                 attention_mask = text['attention_mask']
 
@@ -180,7 +180,7 @@ for epoch in tqdm(range(cfg["epoches"])):
                     device='cuda'
                 )
 
-                table.add_data(steps, test_data[i], output_text[0])
+                table.add_data(steps, text['original_text'][0], output_text[0])
 
             acc.log({"Example outputs": table}, step=steps)
 

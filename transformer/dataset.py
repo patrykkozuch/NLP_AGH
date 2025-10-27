@@ -90,7 +90,10 @@ class ManualDataset(Dataset):
         self.items = []
 
         for text in tqdm(texts):
-            self.items.extend(chunk_text(text, tokenizer, max_len))
+            items = chunk_text(text, tokenizer, max_len)
+            for item in items:
+                item['original_text'] = text
+                self.items.append(item)
 
     def __len__(self):
         return len(self.items)
