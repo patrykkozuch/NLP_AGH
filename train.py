@@ -12,7 +12,7 @@ from transformer.scheduler import TransformerLRScheduler
 from transformer.transformer import Transformer
 
 cfg = {
-    "batch_size": 128,
+    "batch_size": 64,
     "max_len": 512,
     "n_blocks": 6,
     "num_heads": 8,
@@ -56,6 +56,7 @@ with wandb.init(config=cfg) as run:
     table = wandb.Table(columns=columns, log_mode="INCREMENTAL")
     run.watch(transformer, loss_fn, log_freq=10)
 
+    transformer.train()
     for epoch in tqdm(range(cfg["epoches"])):
         for item in tqdm(dataloader, total=len(dataloader), leave=False):
             mask = prepare_mask(item['attention_mask']).to('cuda')
