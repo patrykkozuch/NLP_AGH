@@ -3,7 +3,7 @@ from pathlib import Path
 
 import torch
 from accelerate import Accelerator
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR
 
 import wandb
 from torch.nn import CrossEntropyLoss
@@ -103,8 +103,8 @@ dataloader = DataLoader(dataset, batch_size=cfg["batch_size"], shuffle=True, num
 
 transformer = Transformer(vocab_size=len(tokenizer), seq_len=cfg["max_len"], n_blocks=cfg["n_blocks"], num_heads=cfg["num_heads"], d_ff=cfg["d_ff"], d_model=cfg["d_model"])
 loss_fn = CrossEntropyLoss(label_smoothing=0.1, ignore_index=-100)
-optimizer = torch.optim.Adam(transformer.parameters(), lr=5e-3)
-scheduler = ReduceLROnPlateau(optimizer, "min", patience=5000, factor=0.5, min_lr=1e-4)
+optimizer = torch.optim.Adam(transformer.parameters(), lr=1e-3)
+scheduler = CosineAnnealingLR(optimizer, cfg["epoches"])
 
 test_data = [
     "Pamięć nie jest linią prostą. To raczej labirynt, w którym echo jednego kroku potrafi niespodziewanie",
@@ -132,7 +132,7 @@ columns = ["Steps", "Input", "Output"]
 CHECKPOINTS_DIR = Path(f'checkpoints_' + os.getenv('SLURM_JOB_ID'))
 CHECKPOINTS_DIR.mkdir(parents=True, exist_ok=True)
 
-transformer, loss_fn, optimizer, scheduler, dataloader, test_dataloader = acc.prepare(transformer, loss_fn, optimizer, scheduler, dataloader, test_dataloader)
+transformer, loss_fn, optimizer, dataloader, test_dataloader = acc.prepare(transformer, loss_fn, optimizer, dataloader, test_dataloader)
 
 steps = 0
 table = wandb.Table(columns=columns, log_mode="INCREMENTAL")
@@ -152,7 +152,6 @@ for epoch in tqdm(range(cfg["epoches"])):
         acc.backward(loss)
 
         optimizer.step()
-        scheduler.step(loss)
 
         if steps % cfg['log_freq'] == 0:
             acc.log(
@@ -199,3 +198,5 @@ for epoch in tqdm(range(cfg["epoches"])):
             }, ckpt_path)
 
         steps += 1
+
+    scheduler.step()
