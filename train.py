@@ -3,7 +3,7 @@ from pathlib import Path
 
 import torch
 from accelerate import Accelerator
-from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR
+from torch.optim.lr_scheduler import CosineAnnealingLR
 
 import wandb
 from torch.nn import CrossEntropyLoss
@@ -12,7 +12,6 @@ from tqdm import tqdm
 from transformers import AutoTokenizer
 
 from transformer.dataset import SpeakLeashDataset, prepare_mask, ManualDataset
-from transformer.scheduler import TransformerLRScheduler
 from transformer.transformer import Transformer
 
 
@@ -82,7 +81,7 @@ def complete_sentence(model, input_ids, attention_mask, tokenizer, max_new_token
 
 
 cfg = {
-    "batch_size": 64,
+    "batch_size": 128,
     "max_len": 256,
     "n_blocks": 6,
     "num_heads": 8,
@@ -102,7 +101,7 @@ dataset = SpeakLeashDataset("datasets", tokenizer, max_len=cfg["max_len"])
 dataloader = DataLoader(dataset, batch_size=cfg["batch_size"], shuffle=True, num_workers=4)
 
 transformer = Transformer(vocab_size=len(tokenizer), seq_len=cfg["max_len"], n_blocks=cfg["n_blocks"], num_heads=cfg["num_heads"], d_ff=cfg["d_ff"], d_model=cfg["d_model"])
-loss_fn = CrossEntropyLoss(label_smoothing=0.1, ignore_index=-100)
+loss_fn = CrossEntropyLoss(ignore_index=-100)
 optimizer = torch.optim.Adam(transformer.parameters(), lr=3e-4)
 scheduler = CosineAnnealingLR(optimizer, cfg["epoches"])
 
