@@ -11,20 +11,17 @@ from tqdm import tqdm
 from transformers import AutoTokenizer
 
 
-def chunk_text(text, tokenizer, chunk_size=512):
-    tokens = tokenizer(
-        text,
-        add_special_tokens=True,
-        truncation=False,
-        return_tensors=None
-    )
-
-    input_ids = tokens['input_ids']
+def chunk_text(tokens, tokenizer, chunk_size=512):
+    input_ids = tokens
 
     if len(input_ids) == 0:
         return []
 
-    chunks = []
+    chunks = {
+        "input_ids": [],
+        "attention_mask": [],
+        "labels": []
+    }
 
     for start in range(0, len(input_ids), chunk_size):
         chunk_ids = input_ids[start:start + chunk_size]
@@ -34,8 +31,13 @@ def chunk_text(text, tokenizer, chunk_size=512):
 
         actual_length = len(chunk_ids)
 
-        input_chunk = chunk_ids[:-1]  # All except last
-        label_chunk = chunk_ids[1:]  # All except first
+        input_chunk = chunk_ids  # All except last
+        label_chunk = chunk_ids[1:]
+
+        if start + chunk_size < len(input_ids):
+            label_chunk += [input_ids[start + chunk_size]]
+        else:
+            label_chunk += [tokenizer.pad_token_id]
 
         # Pad to chunk_size - 1 (since we removed one token for shifting)
         max_len = chunk_size
@@ -46,13 +48,11 @@ def chunk_text(text, tokenizer, chunk_size=512):
             label_chunk = label_chunk + [-100] * padding_length  # Ignore padding in loss
 
         # Attention mask
-        attention_mask = [1] * (actual_length - 1) + [0] * padding_length
+        attention_mask = [1] * actual_length + [0] * (padding_length)
 
-        chunks.append({
-            "input_ids": torch.tensor(input_chunk, dtype=torch.long),
-            "attention_mask": torch.tensor(attention_mask, dtype=torch.long),
-            "labels": torch.tensor(label_chunk, dtype=torch.long)
-        })
+        chunks['input_ids'].append(input_chunk)
+        chunks['attention_mask'].append(attention_mask)
+        chunks['labels'].append(label_chunk)
 
     return chunks
 
@@ -90,10 +90,18 @@ class ManualDataset(Dataset):
         self.items = []
 
         for text in tqdm(texts):
-            items = chunk_text(text, tokenizer, max_len)
-            for item in items:
-                item['original_text'] = text
-                self.items.append(item)
+            tokens = tokenizer(
+                text,
+                add_special_tokens=True,
+                return_tensors=None,
+                return_attention_mask=False,
+                truncation=True,
+                max_length=16384
+            )
+            items = chunk_text(tokens['input_ids'], tokenizer, max_len)
+            items = {k: torch.tensor(v, dtype=torch.long).squeeze(0) for k, v in items.items()}
+            items['original_text'] = [text for _ in range(len(items['labels']))]
+            self.items.append(items)
 
     def __len__(self):
         return len(self.items)

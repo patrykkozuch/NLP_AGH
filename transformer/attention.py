@@ -11,7 +11,7 @@ class Attention(nn.Module):
         scaled_product = (q @ k.mT) / math.sqrt(k.size(-1))
 
         if mask is not None:
-            scaled_product = scaled_product.masked_fill(mask, -torch.inf)
+            scaled_product = scaled_product.masked_fill(mask, -1e20)
 
         return nn.functional.softmax(scaled_product, dim=-1) @ v
 

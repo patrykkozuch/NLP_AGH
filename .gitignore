@@ -13,7 +13,7 @@ wheels/
 .env
 
 # Datasets
-datasets
+speakleash_dataset
 
 # Other
 wandb

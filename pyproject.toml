@@ -6,9 +6,13 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "accelerate>=1.11.0",
+    "datasets>=4.3.0",
+    "hf-datasets>=0.3.0",
     "jupyter>=1.1.1",
     "mistral-common>=1.8.5",
     "notebook>=7.4.7",
+    "pytest>=8.4.2",
+    "sentencepiece>=0.2.1",
     "speakleash>=0.3.51",
     "torch>=2.9.0",
     "transformers>=4.57.1",
