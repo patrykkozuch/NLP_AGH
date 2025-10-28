@@ -9,6 +9,4 @@ DATASETS_DIR.mkdir(parents=True, exist_ok=True)
 
 sl = Speakleash(str(DATASETS_DIR))
 
-sl.get('1000_novels_corpus_CLARIN-PL').check_file()
-sl.get('wolne_lektury_corpus').check_file()
-sl.get('plwiki').check_file()
+sl.get('plwikisource').check_file()
