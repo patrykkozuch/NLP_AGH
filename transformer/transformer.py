@@ -49,7 +49,6 @@ class Transformer(nn.Module):
         ])
 
         self.linear = nn.Linear(d_model, vocab_size)
-        self.softmax = nn.Softmax(dim=-1)
 
     def forward(self, x: torch.Tensor, mask: torch.Tensor = None):
         x = self.embedding(x)
@@ -60,9 +59,5 @@ class Transformer(nn.Module):
             x = decoder_block(x, mask)
 
         x = self.linear(x)
-
-        if not self.training:
-            # Apply only during prediction, CrossEntropyLoss applies softmax internally
-            x = self.softmax(x)
 
         return x
