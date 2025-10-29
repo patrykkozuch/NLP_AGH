@@ -12,7 +12,7 @@ class Attention(nn.Module):
         attn_mask = torch.zeros(k.size(-2), v.size(-2), dtype=k.dtype, device=k.device)
         
         if mask is not None:
-            attn_mask = attn_mask.masked_fill(mask, float('-inf'))
+            attn_mask.masked_fill(mask, float('-inf'))
             
         scaled_product += attn_mask
         
