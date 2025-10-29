@@ -16,44 +16,78 @@ from transformer.dataset import prepare_mask, ManualDataset
 from transformer.transformer import Transformer
 
 
-def complete_sentence(model, input_ids, attention_mask, tokenizer, max_new_tokens=128):
+def complete_sentence(model, input_ids, attention_mask, tokenizer, max_new_tokens=64, device='cuda'):
     """
     Complete a sentence by generating tokens autoregressively.
+
+    Args:
+        model: Transformer model
+        input_ids: Input token IDs (batch_size, seq_len)
+        attention_mask: Attention mask (batch_size, seq_len)
+        tokenizer: Tokenizer
+        max_new_tokens: Maximum number of tokens to generate
+        device: Device to run on
+
+    Returns:
+        completed_tokens: Generated token IDs
+        completed_text: Decoded text
     """
     model.eval()
-    
-    # Start with the input
+
+    # Clone input to avoid modifying original
     current_ids = input_ids.clone()
     current_mask = attention_mask.clone()
-    
+    generated_tokens = []
+
     with torch.no_grad():
         for _ in range(max_new_tokens):
-            # Forward pass
-            mask = prepare_mask(current_mask)
+            # Get prediction for the entire sequence
+            mask = prepare_mask(current_mask).to(device)
             output = model(current_ids, mask)  # (batch, seq_len, vocab_size)
-            
-            # Get prediction for NEXT token (last position)
-            next_token_logits = output[:, -1, :]  # (batch, vocab_size)
-            next_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)  # (batch, 1)
-            
-            # Append the new token
-            current_ids = torch.cat([current_ids, next_token], dim=1)
-            current_mask = torch.cat([current_mask, torch.ones_like(next_token)], dim=1)
-            
-            # Optional: stop if EOS token is generated
-            if tokenizer.eos_token_id and (next_token == tokenizer.eos_token_id).all():
+
+            # Get prediction for the last real token position
+            # Find last non-padded position
+            real_positions = (current_mask == 1).long()
+            last_real_idx = real_positions.sum(dim=1) - 1  # (batch_size,)
+            batch_indices = torch.arange(current_ids.size(0), device=device)
+
+            # Get logits for last position of each sample in batch
+            next_token_logits = output[batch_indices, last_real_idx]  # (batch_size, vocab_size)
+
+            # Sample next token (take argmax for deterministic generation)
+            next_token = torch.multinomial(torch.softmax(next_token_logits, dim=-1), num_samples=1)
+            generated_tokens.append(next_token)
+
+            # Check if we reached end-of-sequence token
+            if (next_token == tokenizer.eos_token_id).all() or (next_token == tokenizer.pad_token_id).all():
                 break
-    
-    return tokenizer.batch_decode(current_ids, skip_special_tokens=True)
+
+            # Append next token to sequence
+            last_real_idx += 1
+            current_ids = torch.cat([current_ids[:, :last_real_idx], next_token, current_ids[:, last_real_idx:-1]], dim=1)
+            # Update attention mask
+            new_mask = torch.ones_like(next_token)
+            current_mask = torch.cat([current_mask[:, :last_real_idx], new_mask, current_ids[:, last_real_idx:-1]], dim=1)
+
+    # Concatenate all generated tokens
+    if generated_tokens:
+        all_generated = torch.cat(generated_tokens, dim=1)  # (batch_size, num_generated)
+        completed_ids = torch.cat([input_ids, all_generated], dim=1)
+    else:
+        completed_ids = input_ids
+
+    # Decode to text
+    completed_text = tokenizer.batch_decode(completed_ids, skip_special_tokens=True)
+    return completed_text
 
 
 cfg = {
-    "batch_size": 128,
-    "max_len": 256,
-    "n_blocks": 6,
-    "num_heads": 8,
-    "d_model": 512,
-    "d_ff": 2048,
+    "batch_size": 4,
+    "max_len": 512,
+    "n_blocks": 1,
+    "num_heads": 1,
+    "d_model": 16,
+    "d_ff": 64,
     "log_freq": 1000,
     "prompt_log_freq": 5000,
     "epoches": 100,
