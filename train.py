@@ -101,7 +101,7 @@ table = wandb.Table(columns=columns, log_mode="INCREMENTAL")
 transformer.train()
 
 for epoch in tqdm(range(cfg["epoches"])):
-    for item in tqdm(dataloader, total=len(dataloader), leave=False):
+    for item in tqdm(dataloader, leave=False):
         mask = prepare_mask(item['attention_mask'])
         inputs = item['input_ids']
         targets = item['labels']
