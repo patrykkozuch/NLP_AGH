@@ -67,12 +67,14 @@ def complete_sentence(model, input_ids, attention_mask, tokenizer, max_new_token
             current_ids = torch.cat([current_ids[:, :last_real_idx], next_token, current_ids[:, last_real_idx:-1]], dim=1)
             # Update attention mask
             new_mask = torch.ones_like(next_token)
-            current_mask = torch.cat([current_mask[:, :last_real_idx], new_mask, current_ids[:, last_real_idx:-1]], dim=1)
+            current_mask = torch.cat([current_mask[:, :last_real_idx], new_mask, current_mask[:, last_real_idx:-1]], dim=1)
 
     # Concatenate all generated tokens
     if generated_tokens:
         all_generated = torch.cat(generated_tokens, dim=1)  # (batch_size, num_generated)
-        completed_ids = torch.cat([input_ids, all_generated], dim=1)
+        real_positions = (attention_mask == 1).long()
+        last_real_idx = real_positions.sum(dim=1) - 1  # (batch_size,)
+        completed_ids = torch.cat([input_ids[:, :last_real_idx], all_generated], dim=1)
     else:
         completed_ids = input_ids
 
