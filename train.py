@@ -82,12 +82,12 @@ def complete_sentence(model, input_ids, attention_mask, tokenizer, max_new_token
 
 
 cfg = {
-    "batch_size": 4,
+    "batch_size": 128,
     "max_len": 512,
-    "n_blocks": 1,
-    "num_heads": 1,
-    "d_model": 16,
-    "d_ff": 64,
+    "n_blocks": 6,
+    "num_heads": 8,
+    "d_model": 512,
+    "d_ff": 2048,
     "log_freq": 1000,
     "prompt_log_freq": 5000,
     "epoches": 100,
