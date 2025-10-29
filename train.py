@@ -16,30 +16,35 @@ from transformer.dataset import prepare_mask, ManualDataset
 from transformer.transformer import Transformer
 
 
-def complete_sentence(model, input_ids, attention_mask, tokenizer):
+def complete_sentence(model, input_ids, attention_mask, tokenizer, max_new_tokens=128):
     """
     Complete a sentence by generating tokens autoregressively.
-
-    Args:
-        model: Transformer model
-        input_ids: Input token IDs (batch_size, seq_len)
-        attention_mask: Attention mask (batch_size, seq_len)
-        tokenizer: Tokenizer
-
-    Returns:
-        completed_text: Decoded text
     """
     model.eval()
-
+    
+    # Start with the input
+    current_ids = input_ids.clone()
+    current_mask = attention_mask.clone()
+    
     with torch.no_grad():
-        # Get prediction for the entire sequence
-        mask = prepare_mask(attention_mask)
-        output = model(input_ids, mask)  # (batch, seq_len, vocab_size)
-
-    logits = torch.argmax(output, -1)
-
-    # Decode to text
-    return tokenizer.batch_decode(logits, skip_special_tokens=True)
+        for _ in range(max_new_tokens):
+            # Forward pass
+            mask = prepare_mask(current_mask)
+            output = model(current_ids, mask)  # (batch, seq_len, vocab_size)
+            
+            # Get prediction for NEXT token (last position)
+            next_token_logits = output[:, -1, :]  # (batch, vocab_size)
+            next_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)  # (batch, 1)
+            
+            # Append the new token
+            current_ids = torch.cat([current_ids, next_token], dim=1)
+            current_mask = torch.cat([current_mask, torch.ones_like(next_token)], dim=1)
+            
+            # Optional: stop if EOS token is generated
+            if tokenizer.eos_token_id and (next_token == tokenizer.eos_token_id).all():
+                break
+    
+    return tokenizer.batch_decode(current_ids, skip_special_tokens=True)
 
 
 cfg = {
