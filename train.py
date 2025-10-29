@@ -136,7 +136,6 @@ transformer, loss_fn, optimizer, dataloader, test_dataloader = acc.prepare(trans
 
 steps = 0
 table = wandb.Table(columns=columns, log_mode="INCREMENTAL")
-wandb.watch(transformer, loss_fn)
 transformer.train()
 
 for epoch in tqdm(range(cfg["epoches"])):
