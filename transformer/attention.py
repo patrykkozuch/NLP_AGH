@@ -9,10 +9,13 @@ class Attention(nn.Module):
     """
     def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, mask: torch.Tensor = None):
         scaled_product = (q @ k.mT) / math.sqrt(k.size(-1))
-
+        attn_mask = torch.zeros(k.size(-2), v.size(-2), dtype=k.dtype, device=k.device)
+        
         if mask is not None:
-            scaled_product = scaled_product.masked_fill(mask, -1e20)
-
+            attn_mask = attn_mask.masked_fill(mask, float('-inf'))
+            
+        scaled_product += attn_mask
+        
         return nn.functional.softmax(scaled_product, dim=-1) @ v
 
 class MultiHeadAttention(nn.Module):
