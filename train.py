@@ -83,7 +83,7 @@ def complete_sentence(model, input_ids, attention_mask, tokenizer, max_new_token
 
 cfg = {
     "batch_size": 128,
-    "max_len": 512,
+    "max_len": 256,
     "n_blocks": 6,
     "num_heads": 8,
     "d_model": 512,
