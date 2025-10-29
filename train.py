@@ -59,7 +59,7 @@ acc = Accelerator(cpu=False, mixed_precision='bf16', log_with='wandb')
 acc.init_trackers(project_name=os.getenv('WANDB_PROJECT'), config=cfg)
 
 tokenizer = AutoTokenizer.from_pretrained('speakleash/Bielik-1.5B-v3')
-dataset = load_dataset('parquet', data_files={'train': 'dataset.parquet'}, split='train', streaming=True).with_format('torch')
+dataset = load_dataset('parquet', data_files={'train': 'dataset.parquet'}, split='train').with_format('torch')
 dataloader = DataLoader(dataset, batch_size=cfg["batch_size"], num_workers=4)
 
 transformer = Transformer(vocab_size=len(tokenizer), seq_len=cfg["max_len"], n_blocks=cfg["n_blocks"], num_heads=cfg["num_heads"], d_ff=cfg["d_ff"], d_model=cfg["d_model"])
@@ -101,7 +101,7 @@ table = wandb.Table(columns=columns, log_mode="INCREMENTAL")
 transformer.train()
 
 for epoch in tqdm(range(cfg["epoches"])):
-    for item in tqdm(dataloader, leave=False):
+    for item in tqdm(dataloader, total=len(dataloader), leave=False):
         mask = prepare_mask(item['attention_mask'])
         inputs = item['input_ids']
         targets = item['labels']
