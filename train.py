@@ -3,8 +3,7 @@ from pathlib import Path
 
 import torch
 from accelerate import Accelerator
-from datasets import Dataset, load_from_disk, load_dataset
-from torch.optim.lr_scheduler import CosineAnnealingLR
+from datasets import load_dataset
 
 import wandb
 from torch.nn import CrossEntropyLoss
@@ -13,6 +12,7 @@ from tqdm import tqdm
 from transformers import AutoTokenizer
 
 from transformer.dataset import prepare_mask, ManualDataset
+from transformer.scheduler import TransformerLRScheduler
 from transformer.transformer import Transformer
 
 
@@ -105,8 +105,8 @@ dataloader = DataLoader(dataset, batch_size=cfg["batch_size"], num_workers=4)
 
 transformer = Transformer(vocab_size=len(tokenizer), seq_len=cfg["max_len"], n_blocks=cfg["n_blocks"], num_heads=cfg["num_heads"], d_ff=cfg["d_ff"], d_model=cfg["d_model"])
 loss_fn = CrossEntropyLoss(ignore_index=-100)
-optimizer = torch.optim.Adam(transformer.parameters(), lr=3e-4)
-scheduler = CosineAnnealingLR(optimizer, cfg["epoches"])
+optimizer = torch.optim.Adam(transformer.parameters(), lr=0)
+scheduler = TransformerLRScheduler(optimizer, d_model=cfg["d_model"], warmup_steps=4000)
 
 test_data = [
     "Pamięć nie jest linią prostą. To raczej labirynt, w którym echo jednego kroku potrafi niespodziewanie",
@@ -198,4 +198,4 @@ for epoch in tqdm(range(cfg["epoches"])):
 
         steps += 1
 
-    scheduler.step()
+        scheduler.step()
