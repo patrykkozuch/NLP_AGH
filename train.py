@@ -19,25 +19,12 @@ from transformer.transformer import Transformer
 def complete_sentence(model, input_ids, attention_mask, tokenizer, max_new_tokens=64, device='cuda'):
     """
     Complete a sentence by generating tokens autoregressively.
-
-    Args:
-        model: Transformer model
-        input_ids: Input token IDs (batch_size, seq_len)
-        attention_mask: Attention mask (batch_size, seq_len)
-        tokenizer: Tokenizer
-        max_new_tokens: Maximum number of tokens to generate
-        device: Device to run on
-
-    Returns:
-        completed_tokens: Generated token IDs
-        completed_text: Decoded text
     """
     model.eval()
 
     # Clone input to avoid modifying original
     current_ids = input_ids.clone()
     current_mask = attention_mask.clone()
-    generated_tokens = []
 
     with torch.no_grad():
         for _ in range(max_new_tokens):
@@ -45,42 +32,26 @@ def complete_sentence(model, input_ids, attention_mask, tokenizer, max_new_token
             mask = prepare_mask(current_mask).to(device)
             output = model(current_ids, mask)  # (batch, seq_len, vocab_size)
 
-            # Get prediction for the last real token position
-            # Find last non-padded position
+            # Get logits for the last real token position
             real_positions = (current_mask == 1).long()
             last_real_idx = real_positions.sum(dim=1) - 1  # (batch_size,)
             batch_indices = torch.arange(current_ids.size(0), device=device)
-
-            # Get logits for last position of each sample in batch
             next_token_logits = output[batch_indices, last_real_idx]  # (batch_size, vocab_size)
 
-            # Sample next token (take argmax for deterministic generation)
+            # Sample next token
             next_token = torch.multinomial(torch.softmax(next_token_logits, dim=-1), num_samples=1)
-            generated_tokens.append(next_token)
 
-            # Check if we reached end-of-sequence token
-            if (next_token == tokenizer.eos_token_id).all() or (next_token == tokenizer.pad_token_id).all():
+            # Check for end-of-sequence
+            if (next_token == tokenizer.eos_token_id).all():
                 break
 
-            # Append next token to sequence
-            last_real_idx += 1
-            current_ids = torch.cat([current_ids[:, :last_real_idx], next_token, current_ids[:, last_real_idx:-1]], dim=1)
-            # Update attention mask
-            new_mask = torch.ones_like(next_token)
-            current_mask = torch.cat([current_mask[:, :last_real_idx], new_mask, current_mask[:, last_real_idx:-1]], dim=1)
-
-    # Concatenate all generated tokens
-    if generated_tokens:
-        all_generated = torch.cat(generated_tokens, dim=1)  # (batch_size, num_generated)
-        real_positions = (attention_mask == 1).long()
-        last_real_idx = real_positions.sum(dim=1) - 1  # (batch_size,)
-        completed_ids = torch.cat([input_ids[:, :last_real_idx], all_generated], dim=1)
-    else:
-        completed_ids = input_ids
+            # Simply append the new token to the sequence
+            current_ids = torch.cat([current_ids, next_token], dim=1)
+            current_mask = torch.cat([current_mask, torch.ones_like(next_token)], dim=1)
 
     # Decode to text
-    completed_text = tokenizer.batch_decode(completed_ids, skip_special_tokens=True)
-    return completed_text
+    completed_text = tokenizer.batch_decode(current_ids, skip_special_tokens=True)
+    return current_ids, completed_text
 
 
 cfg = {
@@ -93,7 +64,8 @@ cfg = {
     "log_freq": 1000,
     "prompt_log_freq": 5000,
     "epoches": 100,
-    "chkpoint_freq": 5000
+    "chkpoint_freq": 5000,
+    "slurm_job_id": os.getenv('SLURM_JOB_ID', 'local_run')
 }
 
 acc = Accelerator(cpu=False, mixed_precision='bf16', log_with='wandb')
@@ -129,7 +101,7 @@ test_data = [
 test_dataset = ManualDataset(test_data, tokenizer, cfg["max_len"])
 test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
-columns = ["Steps", "Input", "Output"]
+columns = ["Steps", "Input", "Output", "Output tokens"]
 
 CHECKPOINTS_DIR = Path(f'checkpoints_' + os.getenv('SLURM_JOB_ID'))
 CHECKPOINTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -172,14 +144,14 @@ for epoch in tqdm(range(cfg["epoches"])):
                 inputs = text['input_ids']
                 attention_mask = text['attention_mask']
                 # Complete the sentence
-                output_text = complete_sentence(
+                output_ids, output_text = complete_sentence(
                     transformer,
                     inputs,
                     attention_mask,
                     tokenizer
                 )
 
-                table.add_data(steps, text['original_text'][0][0], output_text[0])
+                table.add_data(steps, text['original_text'][0][0], output_text[0], output_ids[0].cpu().numpy())
 
             acc.log({"Example outputs": table}, step=steps)
 

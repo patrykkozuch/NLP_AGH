@@ -93,14 +93,13 @@ class ManualDataset(Dataset):
             tokens = tokenizer(
                 text,
                 add_special_tokens=True,
-                return_tensors=None,
-                return_attention_mask=False,
+                return_tensors='pt',
+                return_attention_mask=True,
                 truncation=True,
-                max_length=16384
+                max_length=256
             )
-            items = chunk_text(tokens['input_ids'], tokenizer, max_len)
-            items = {k: torch.tensor(v, dtype=torch.long).squeeze(0) for k, v in items.items()}
-            items['original_text'] = [text for _ in range(len(items['labels']))]
+            items = {k: torch.tensor(v, dtype=torch.long).squeeze(0) for k, v in tokens.items()}
+            items['original_text'] = [text]
             self.items.append(items)
 
     def __len__(self):
