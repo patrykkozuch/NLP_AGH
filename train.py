@@ -63,7 +63,7 @@ cfg = {
     "d_ff": 2048,
     "log_freq": 1000,
     "prompt_log_freq": 5000,
-    "epoches": 100,
+    "epoches": 50,
     "chkpoint_freq": 5000,
     "slurm_job_id": os.getenv('SLURM_JOB_ID', 'local_run')
 }
@@ -171,3 +171,5 @@ for epoch in tqdm(range(cfg["epoches"])):
         steps += 1
 
         scheduler.step()
+
+acc.end_training()
