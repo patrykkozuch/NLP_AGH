@@ -16,7 +16,7 @@ from transformer.scheduler import TransformerLRScheduler
 from transformer.transformer import Transformer
 
 
-def complete_sentence(model, input_ids, attention_mask, tokenizer, max_new_tokens=64, device='cuda'):
+def complete_sentence(model, input_ids, attention_mask, tokenizer, max_new_tokens=128, device='cuda'):
     """
     Complete a sentence by generating tokens autoregressively.
     """
@@ -76,8 +76,8 @@ dataset = load_dataset('parquet', data_files={'train': 'dataset.parquet'}, split
 dataloader = DataLoader(dataset, batch_size=cfg["batch_size"], num_workers=4)
 
 transformer = Transformer(vocab_size=len(tokenizer), seq_len=cfg["max_len"], n_blocks=cfg["n_blocks"], num_heads=cfg["num_heads"], d_ff=cfg["d_ff"], d_model=cfg["d_model"])
-loss_fn = CrossEntropyLoss(ignore_index=-100)
-optimizer = torch.optim.Adam(transformer.parameters(), lr=0)
+loss_fn = CrossEntropyLoss(label_smoothing=0.1, ignore_index=-100)
+optimizer = torch.optim.Adam(transformer.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9)
 scheduler = TransformerLRScheduler(optimizer, d_model=cfg["d_model"], warmup_steps=4000)
 
 test_data = [
