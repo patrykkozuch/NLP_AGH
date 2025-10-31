@@ -151,7 +151,7 @@ for epoch in tqdm(range(cfg["epoches"])):
                     tokenizer
                 )
 
-                table.add_data(steps, text['original_text'][0][0], output_text[0], output_ids[0].cpu().numpy())
+                table.add_data(steps, text['original_text'][0][0], output_text[0], output_ids[0].cpu().numpy().tolist())
 
             acc.log({"Example outputs": table}, step=steps)
 
