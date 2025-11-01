@@ -72,8 +72,11 @@ acc = Accelerator(cpu=False, mixed_precision='bf16', log_with='wandb')
 acc.init_trackers(project_name=os.getenv('WANDB_PROJECT'), config=cfg)
 
 tokenizer = AutoTokenizer.from_pretrained('speakleash/Bielik-1.5B-v3')
-dataset = load_dataset('parquet', data_files={'train': 'dataset.parquet'}, split='train').with_format('torch')
-dataloader = DataLoader(dataset, batch_size=cfg["batch_size"], num_workers=4)
+train_dataset = load_dataset('parquet', data_files={'train': 'dataset.parquet'}, split='train').with_format('torch')
+train_dataloader = DataLoader(train_dataset, batch_size=cfg["batch_size"], num_workers=4)
+
+val_dataset = load_dataset('parquet', data_files={'validation': 'val_dataset.parquet'}, split='validation').with_format('torch')
+val_dataloader = DataLoader(val_dataset, batch_size=cfg["batch_size"], num_workers=4)
 
 transformer = Transformer(vocab_size=len(tokenizer), seq_len=cfg["max_len"], n_blocks=cfg["n_blocks"], num_heads=cfg["num_heads"], d_ff=cfg["d_ff"], d_model=cfg["d_model"])
 loss_fn = CrossEntropyLoss(label_smoothing=0.1, ignore_index=-100)
@@ -106,14 +109,14 @@ columns = ["Steps", "Input", "Output", "Output tokens"]
 CHECKPOINTS_DIR = Path(f'checkpoints_' + os.getenv('SLURM_JOB_ID'))
 CHECKPOINTS_DIR.mkdir(parents=True, exist_ok=True)
 
-transformer, loss_fn, optimizer, dataloader, test_dataloader = acc.prepare(transformer, loss_fn, optimizer, dataloader, test_dataloader)
+transformer, loss_fn, optimizer, train_dataloader, val_dataloader, test_dataloader = acc.prepare(transformer, loss_fn, optimizer, train_dataloader, val_dataloader, test_dataloader)
 
 steps = 0
 table = wandb.Table(columns=columns, log_mode="INCREMENTAL")
 transformer.train()
 
 for epoch in tqdm(range(cfg["epoches"])):
-    for item in tqdm(dataloader, total=len(dataloader), leave=False):
+    for item in tqdm(train_dataloader, total=len(train_dataloader), leave=False):
         mask = prepare_mask(item['attention_mask'])
         inputs = item['input_ids']
         targets = item['labels']
@@ -171,5 +174,22 @@ for epoch in tqdm(range(cfg["epoches"])):
         steps += 1
 
         scheduler.step()
+
+    for item in val_dataloader:
+        mask = prepare_mask(item['attention_mask'])
+        inputs = item['input_ids']
+        targets = item['labels']
+
+        with torch.no_grad():
+            output = transformer(inputs, mask)
+            val_loss = loss_fn(output.view(-1, output.size(-1)), targets.view(-1))
+
+        acc.log(
+            values={
+                "Validation Loss": val_loss,
+                "Validation Perplexity": torch.exp(val_loss)
+            },
+            step=steps
+        )
 
 acc.end_training()
