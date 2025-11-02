@@ -72,10 +72,10 @@ acc = Accelerator(cpu=False, mixed_precision='bf16', log_with='wandb')
 acc.init_trackers(project_name=os.getenv('WANDB_PROJECT'), config=cfg)
 
 tokenizer = AutoTokenizer.from_pretrained('speakleash/Bielik-1.5B-v3')
-train_dataset = load_dataset('parquet', data_files={'train': 'dataset.parquet'}, split='train').with_format('torch')
+train_dataset = load_dataset('json', data_files={'train': 'chunked.plwikisource.jsonl.zst'}, split='train').with_format('torch')
 train_dataloader = DataLoader(train_dataset, batch_size=cfg["batch_size"], num_workers=4)
 
-val_dataset = load_dataset('parquet', data_files={'validation': 'val_dataset.parquet'}, split='validation').with_format('torch')
+val_dataset = load_dataset('json', data_files={'validation': 'chunked.wolne_lektury_corpus.jsonl.zst'}, split='validation').with_format('torch')
 val_dataloader = DataLoader(val_dataset, batch_size=cfg["batch_size"], num_workers=4)
 
 transformer = Transformer(vocab_size=len(tokenizer), seq_len=cfg["max_len"], n_blocks=cfg["n_blocks"], num_heads=cfg["num_heads"], d_ff=cfg["d_ff"], d_model=cfg["d_model"])

@@ -1,17 +1,23 @@
-import io
-import json
-
 import torch
-import zstandard as zst
 
 from torch.utils.data import Dataset
-from pathlib import Path
 
 from tqdm import tqdm
-from transformers import AutoTokenizer
+from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 
 
-def chunk_text(tokens, tokenizer, chunk_size=512):
+def chunk_text(tokens: list[int], tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast, chunk_size=256):
+    """
+    Splits tokenized input into chunks of specified size.
+
+    Args:
+        tokens (list[int]): List of token IDs.
+        tokenizer (PreTrainedTokenizer | PreTrainedTokenizerFast): Tokenizer for padding token
+        chunk_size (int): Size of each chunk.
+
+    Returns:
+        dict: Dictionary with keys 'input_ids', 'attention_mask', and 'labels' containing lists of chunks.
+    """
     input_ids = tokens
 
     if len(input_ids) == 0:
@@ -37,7 +43,7 @@ def chunk_text(tokens, tokenizer, chunk_size=512):
         if start + chunk_size < len(input_ids):
             label_chunk += [input_ids[start + chunk_size]]
         else:
-            label_chunk += [tokenizer.pad_token_id]
+            label_chunk += [tokenizer.eos_token_id]
 
         # Pad to chunk_size - 1 (since we removed one token for shifting)
         max_len = chunk_size
@@ -48,7 +54,7 @@ def chunk_text(tokens, tokenizer, chunk_size=512):
             label_chunk = label_chunk + [-100] * padding_length  # Ignore padding in loss
 
         # Attention mask
-        attention_mask = [1] * actual_length + [0] * (padding_length)
+        attention_mask = [1] * actual_length + [0] * padding_length
 
         chunks['input_ids'].append(input_chunk)
         chunks['attention_mask'].append(attention_mask)
@@ -56,37 +62,8 @@ def chunk_text(tokens, tokenizer, chunk_size=512):
 
     return chunks
 
-class SpeakLeashDataset(Dataset):
-    def __init__(self, data_dir: str | Path, tokenizer: AutoTokenizer, max_len=512):
-        self.max_len = max_len
-        self.tokenizer = tokenizer
-        self.items = []
-
-        data_dir = Path(data_dir)
-        for text in tqdm(self._get_texts(data_dir)):
-            self.items.extend(chunk_text(text, tokenizer, max_len))
-
-    def __len__(self):
-        return len(self.items)
-
-    def __getitem__(self, idx):
-        return self.items[idx]
-
-
-    @staticmethod
-    def _get_texts(data_dir: Path):
-        for file in data_dir.glob("*.jsonl.zst"):
-            with open(file, 'rb') as fp:
-                decompressor = zst.ZstdDecompressor()
-                stream_reader = decompressor.stream_reader(fp)
-                stream = io.TextIOWrapper(stream_reader, encoding='utf-8')
-                for line in stream:
-                    yield json.loads(line)['text']
-
 class ManualDataset(Dataset):
-    def __init__(self, texts: list[str], tokenizer: AutoTokenizer, max_len=512):
-        self.max_len = max_len
-        self.tokenizer = tokenizer
+    def __init__(self, texts: list[str], tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast, max_len=256):
         self.items = []
 
         for text in tqdm(texts):
@@ -96,9 +73,11 @@ class ManualDataset(Dataset):
                 return_tensors='pt',
                 return_attention_mask=True,
                 truncation=True,
-                max_length=256
+                max_length=max_len
             )
-            items = {k: torch.tensor(v, dtype=torch.long).squeeze(0) for k, v in tokens.items()}
+
+            # Squeeze batch dimension
+            items = {k: v.squeeze(0) for k, v in tokens.items()}
             items['original_text'] = [text]
             self.items.append(items)
 
@@ -111,6 +90,9 @@ class ManualDataset(Dataset):
 
 
 def prepare_mask(attention_mask: torch.Tensor) -> torch.Tensor:
+    """
+    Combines causal mask and padding mask for transformer attention.
+    """
     batch_size, seq_len = attention_mask.shape
     device = attention_mask.device
 

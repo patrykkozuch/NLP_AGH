@@ -13,7 +13,8 @@ class Attention(nn.Module):
         
         if mask is not None:
             attn_mask.masked_fill(mask, float('-inf'))
-            
+
+        # Use additive mask to avoid attention problems with NaN values in softmax
         scaled_product += attn_mask
         
         return nn.functional.softmax(scaled_product, dim=-1) @ v
