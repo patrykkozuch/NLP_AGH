@@ -9,24 +9,24 @@ class Decoder(nn.Module):
     def __init__(self, num_heads: int, d_model: int, d_ff: int, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.masked_attn = MultiHeadAttention(num_heads=num_heads, d_model=d_model)
-        self.dropout1 = nn.Dropout(p=0.1)
         self.ln_masked_attn = nn.LayerNorm(d_model)
-        self.dropout = nn.Dropout(p=0.1)
+        self.masked_attn = MultiHeadAttention(num_heads=num_heads, d_model=d_model)
+        self.dropout_masked_attn = nn.Dropout(p=0.1)
         self.ln_ff = nn.LayerNorm(d_model)
         self.ff = nn.Sequential(
             nn.Linear(d_model, d_ff),
             nn.GELU(),
             nn.Linear(d_ff, d_model)
         )
+        self.dropout_ff = nn.Dropout(p=0.1)
 
     def forward(self, src: torch.Tensor, mask: torch.Tensor):
+        src = self.ln_masked_attn(src)
         out = self.masked_attn(src, src, src, mask=mask)
-        out = self.dropout(out)
-        src = self.ln_masked_attn(src + out)
+        src = src + self.dropout_masked_attn(out)
+        src = self.ln_ff(src)
         out = self.ff(src)
-        out = self.dropout(out)
-        return self.ln_ff(src + out)
+        return out + self.dropout_ff(out)
 
 
 
@@ -48,6 +48,7 @@ class Transformer(nn.Module):
             for _ in range(n_blocks)
         ])
 
+        self.ln = nn.LayerNorm(d_model)
         self.linear = nn.Linear(d_model, vocab_size)
 
     def forward(self, x: torch.Tensor, mask: torch.Tensor = None):
@@ -58,6 +59,7 @@ class Transformer(nn.Module):
         for decoder_block in self.decoder:
             x = decoder_block(x, mask)
 
+        x = self.ln(x)
         x = self.linear(x)
 
         return x
