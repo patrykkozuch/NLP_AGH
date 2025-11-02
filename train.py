@@ -71,7 +71,7 @@ cfg = {
 acc = Accelerator(cpu=False, mixed_precision='bf16', log_with='wandb')
 acc.init_trackers(project_name=os.getenv('WANDB_PROJECT'), config=cfg)
 
-tokenizer = AutoTokenizer.from_pretrained('speakleash/Bielik-1.5B-v3')
+tokenizer = AutoTokenizer.from_pretrained('speakleash/Bielik-1.5B-v3', use_fast=True)
 train_dataset = load_dataset('json', data_files={'train': 'chunked.plwikisource.jsonl.zst'}, split='train').with_format('torch')
 train_dataloader = DataLoader(train_dataset, batch_size=cfg["batch_size"], num_workers=4)
 
