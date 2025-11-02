@@ -2,7 +2,6 @@ import torch
 
 from torch.utils.data import Dataset
 
-from tqdm import tqdm
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 
 
@@ -62,11 +61,16 @@ def chunk_text(tokens: list[int], tokenizer: PreTrainedTokenizer | PreTrainedTok
 
     return chunks
 
+
 class ManualDataset(Dataset):
+    """
+    Custom Dataset for manual text inputs.
+    """
+
     def __init__(self, texts: list[str], tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast, max_len=256):
         self.items = []
 
-        for text in tqdm(texts):
+        for text in texts:
             tokens = tokenizer(
                 text,
                 add_special_tokens=True,
@@ -86,7 +90,6 @@ class ManualDataset(Dataset):
 
     def __getitem__(self, idx):
         return self.items[idx]
-
 
 
 def prepare_mask(attention_mask: torch.Tensor) -> torch.Tensor:
