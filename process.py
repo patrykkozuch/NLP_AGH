@@ -2,6 +2,7 @@ import pandas as pd
 import datasets
 from transformers import AutoTokenizer
 
+from config import cfg
 from transformer.dataset import chunk_text
 
 tokenizer = AutoTokenizer.from_pretrained('speakleash/Bielik-1.5B-v3', use_fast=True)
@@ -13,11 +14,11 @@ def tokenize(texts):
         return_tensors=None,
         return_attention_mask=False,
         truncation=True,
-        max_length=16384
+        max_length=32768
     )
 
 def chunk(tokens):
-    return chunk_text(tokens['input_ids'], tokenizer, 256)
+    return chunk_text(tokens['input_ids'], tokenizer, cfg['max_len'])
 
 def split_column(df: pd.DataFrame):
     return df.explode(["input_ids", "attention_mask", "labels"])
