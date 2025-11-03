@@ -28,7 +28,7 @@ def load_datasets():
         data_files={'train': 'chunked.plwikisource.jsonl.zst'},
         split='train'
     ).with_format('torch')
-    train_dataloader = DataLoader(train_dataset, batch_size=cfg["batch_size"], num_workers=4, persistent_workers=True, pin_memory=True)
+    train_dataloader = DataLoader(train_dataset, batch_size=cfg["batch_size"], num_workers=4, persistent_workers=True, pin_memory=True, shuffle=True)
 
     val_dataset = load_dataset(
         'json',
