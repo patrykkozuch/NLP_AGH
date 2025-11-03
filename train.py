@@ -17,7 +17,7 @@ from transformer.transformer import Transformer
 
 
 def setup_accelerator():
-    acc = Accelerator(cpu=False, mixed_precision='bf16', log_with='wandb', gradient_accumulation_steps=cfg["gradient_accumulation_steps"])
+    acc = Accelerator(cpu=False, mixed_precision='bf16', log_with='wandb')
     acc.init_trackers(project_name=os.getenv('WANDB_PROJECT'), config=cfg)
     return acc
 
@@ -106,6 +106,7 @@ def train_step(transformer, loss_fn, optimizer, acc, item):
     output = transformer(inputs, mask)
     loss = loss_fn(output.view(-1, output.size(-1)), targets.view(-1))
     acc.backward(loss)
+    acc.clip_grad_norm_(transformer.parameters(), 1)
     optimizer.step()
     optimizer.zero_grad()
 
@@ -195,20 +196,19 @@ def main():
 
     for epoch in tqdm(range(cfg["epoches"])):
         for item in tqdm(train_dataloader, total=len(train_dataloader), leave=False):
-            with acc.accumulate(transformer):
-                loss = train_step(transformer, loss_fn, optimizer, acc, item)
+            loss = train_step(transformer, loss_fn, optimizer, acc, item)
 
-                if steps % cfg['log_freq'] == 0:
-                    log_metrics(acc, loss, scheduler, steps)
+            if steps % cfg['log_freq'] == 0:
+                log_metrics(acc, loss, scheduler, steps)
 
-                if steps % cfg['prompt_log_freq'] == 0:
-                    log_examples(acc, transformer, test_dataloader, tokenizer, table, steps)
+            if steps % cfg['prompt_log_freq'] == 0:
+                log_examples(acc, transformer, test_dataloader, tokenizer, table, steps)
 
-                if steps % cfg["chkpoint_freq"] == 0:
-                    save_checkpoint(transformer, optimizer, steps)
+            if steps % cfg["chkpoint_freq"] == 0:
+                save_checkpoint(transformer, optimizer, steps)
 
-                steps += 1
-                scheduler.step()
+            steps += 1
+            scheduler.step()
 
         validate(acc, transformer, val_dataloader, loss_fn, steps)
 
