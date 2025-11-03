@@ -12,12 +12,12 @@ CHECKPOINTS_DIR = BASE_DIR / (f'checkpoints_' + os.getenv('SLURM_JOB_ID'))
 CHECKPOINTS_DIR.mkdir(parents=True, exist_ok=True)
 
 cfg = {
-    "batch_size": 128,
-    "max_len": 256,
-    "n_blocks": 6,
-    "num_heads": 8,
-    "d_model": 512,
-    "d_ff": 2048,
+    "batch_size": 32,
+    "max_len": 512,
+    "n_blocks": 12,
+    "num_heads": 12,
+    "d_model": 768,
+    "d_ff": 3072,
     "log_freq": 1000,
     "prompt_log_freq": 5000,
     "epoches": 50,
