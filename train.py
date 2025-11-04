@@ -192,6 +192,7 @@ def main():
 
     steps = 0
     table = wandb.Table(columns=["Steps", "Input", "Output", "Output tokens"], log_mode="INCREMENTAL")
+    transformer.compile()
     transformer.train()
 
     for epoch in tqdm(range(cfg["epoches"])):

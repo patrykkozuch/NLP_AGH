@@ -91,7 +91,7 @@ class ManualDataset(Dataset):
     def __getitem__(self, idx):
         return self.items[idx]
 
-
+@torch.compile
 def prepare_mask(attention_mask: torch.Tensor) -> torch.Tensor:
     """
     Combines causal mask and padding mask for transformer attention.
