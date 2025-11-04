@@ -112,7 +112,7 @@ def train_step(transformer, loss_fn, optimizer, acc, item):
 
 
     output = transformer(inputs, mask)
-    loss = loss_fn(output.view(-1, output.size(-1)), targets.view(-1))
+    loss = loss_fn(output.reshape(-1, output.size(-1)), targets.reshape(-1))
     acc.backward(loss)
     acc.clip_grad_norm_(transformer.parameters(), 1)
     optimizer.step()
@@ -174,7 +174,7 @@ def validate(acc, transformer, val_dataloader, loss_fn, steps):
 
         with torch.no_grad():
             output = transformer(inputs, mask)
-            val_loss = loss_fn(output.view(-1, output.size(-1)), targets.view(-1))
+            val_loss = loss_fn(output.reshape(-1, output.size(-1)), targets.reshape(-1))
 
         total_val_loss += val_loss.item()
         num_batches += 1
