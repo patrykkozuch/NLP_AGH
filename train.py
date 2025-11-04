@@ -71,7 +71,7 @@ def setup_model():
         d_model=cfg["d_model"]
     )
 
-    loss_fn = CrossEntropyLoss(ignore_index=-100)
+    loss_fn = CrossEntropyLoss(label_smoothing=0.1, ignore_index=-100)
     optimizer = torch.optim.Adam(transformer.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9)
     scheduler = TransformerLRScheduler(optimizer, d_model=cfg["d_model"], warmup_steps=4000)
 

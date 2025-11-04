@@ -15,14 +15,13 @@ cfg = {
     "batch_size": 64,
     "max_len": 512,
     "n_blocks": 12,
-    "num_heads": 8,
+    "num_heads": 12,
     "d_model": 768,
     "d_ff": 3072,
     "log_freq": 1000,
     "prompt_log_freq": 5000,
     "epoches": 50,
     "chkpoint_freq": 5000,
-    "gradient_accumulation_steps": 4,
     "slurm_job_id": os.getenv('SLURM_JOB_ID', 'local_run')
 }
 

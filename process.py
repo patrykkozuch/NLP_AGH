@@ -27,6 +27,7 @@ def split_column(df: pd.DataFrame):
 def process_dataset(file_path: str, output_path: str):
     dataset = (
         datasets.load_dataset('json', data_files=[file_path], num_proc=20)
+        .filter(lambda x: x['meta']['quality'] == 'HIGH', num_proc=20)
         .map(tokenize, batched=True, num_proc=20, remove_columns=['meta', 'text'])
         .map(chunk, batched=False, num_proc=20, remove_columns=['input_ids'])
         # Chunk method produces lists inside the columns, we need to explode them
