@@ -106,9 +106,9 @@ def prepare_with_acc(acc, transformer, loss_fn, optimizer, train_dataloader, val
 
 
 def train_step(transformer, loss_fn, optimizer, acc, item):
-    mask = prepare_mask(item['attention_mask'][:-1])
-    inputs = item['input_ids'][:-1]
-    targets = item['input_ids'][1:]
+    mask = prepare_mask(item['attention_mask'][..., :-1])
+    inputs = item['input_ids'][..., :-1]
+    targets = item['input_ids'][..., 1:]
 
 
     output = transformer(inputs, mask)
@@ -168,9 +168,9 @@ def validate(acc, transformer, val_dataloader, loss_fn, steps):
     num_batches = 0
 
     for item in val_dataloader:
-        mask = prepare_mask(item['attention_mask'][:-1])
-        inputs = item['input_ids'][:-1]
-        targets = item['input_ids'][1:]
+        mask = prepare_mask(item['attention_mask'][..., :-1])
+        inputs = item['input_ids'][..., :-1]
+        targets = item['input_ids'][..., 1:]
 
         with torch.no_grad():
             output = transformer(inputs, mask)
