@@ -2,6 +2,7 @@ import os
 
 import torch
 from accelerate import Accelerator
+from accelerate.utils import TorchDynamoPlugin
 from datasets import load_dataset
 
 import wandb
@@ -17,7 +18,14 @@ from transformer.transformer import Transformer
 
 
 def setup_accelerator():
-    acc = Accelerator(cpu=False, mixed_precision='bf16', log_with='wandb')
+    dynamo_plugin = TorchDynamoPlugin(
+        backend="inductor",  # Options: "inductor", "aot_eager", "aot_nvfuser", etc.
+        use_regional_compilation=True,
+        mode="default",  # Options: "default", "reduce-overhead", "max-autotune"
+        fullgraph=True,
+        dynamic=False
+    )
+    acc = Accelerator(cpu=False, log_with='wandb', dynamo_plugin=dynamo_plugin)
     acc.init_trackers(project_name=os.getenv('WANDB_PROJECT'), config=cfg)
     return acc
 
@@ -192,7 +200,6 @@ def main():
 
     steps = 0
     table = wandb.Table(columns=["Steps", "Input", "Output", "Output tokens"], log_mode="INCREMENTAL")
-    transformer.compile()
     transformer.train()
 
     for epoch in tqdm(range(cfg["epoches"])):
