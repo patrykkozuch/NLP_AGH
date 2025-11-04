@@ -25,7 +25,7 @@ def setup_accelerator():
         fullgraph=True,
         dynamic=False
     )
-    acc = Accelerator(cpu=False, log_with='wandb', dynamo_plugin=dynamo_plugin)
+    acc = Accelerator(cpu=False, log_with='wandb', mixed_precision='bf16', dynamo_plugin=dynamo_plugin)
     acc.init_trackers(project_name=os.getenv('WANDB_PROJECT'), config=cfg)
     return acc
 
@@ -33,14 +33,14 @@ def setup_accelerator():
 def load_datasets():
     train_dataset = load_dataset(
         'json',
-        data_files={'train': 'chunked.plwikisource.jsonl.zst'},
+        data_files={'train': 'chunked.train.jsonl.zst'},
         split='train'
     ).with_format('torch')
     train_dataloader = DataLoader(train_dataset, batch_size=cfg["batch_size"], num_workers=4, persistent_workers=True, pin_memory=True, shuffle=True)
 
     val_dataset = load_dataset(
         'json',
-        data_files={'validation': 'chunked.wolne_lektury_corpus.jsonl.zst'},
+        data_files={'validation': 'chunked.valid.jsonl.zst'},
         split='validation'
     ).with_format('torch')
     val_dataloader = DataLoader(val_dataset, batch_size=cfg["batch_size"], num_workers=4, persistent_workers=True, pin_memory=True)
@@ -106,9 +106,9 @@ def prepare_with_acc(acc, transformer, loss_fn, optimizer, train_dataloader, val
 
 
 def train_step(transformer, loss_fn, optimizer, acc, item):
-    mask = prepare_mask(item['attention_mask'])
-    inputs = item['input_ids']
-    targets = item['labels']
+    mask = prepare_mask(item['attention_mask'][:-1])
+    inputs = item['input_ids'][:-1]
+    targets = item['input_ids'][1:]
 
 
     output = transformer(inputs, mask)
@@ -168,9 +168,9 @@ def validate(acc, transformer, val_dataloader, loss_fn, steps):
     num_batches = 0
 
     for item in val_dataloader:
-        mask = prepare_mask(item['attention_mask'])
-        inputs = item['input_ids']
-        targets = item['labels']
+        mask = prepare_mask(item['attention_mask'][:-1])
+        inputs = item['input_ids'][:-1]
+        targets = item['input_ids'][1:]
 
         with torch.no_grad():
             output = transformer(inputs, mask)
@@ -215,10 +215,11 @@ def main():
             if steps % cfg["chkpoint_freq"] == 0:
                 save_checkpoint(transformer, optimizer, steps)
 
+            if steps % cfg["val_freq"] == 0:
+                validate(acc, transformer, val_dataloader, loss_fn, steps)
+
             steps += 1
             scheduler.step()
-
-        validate(acc, transformer, val_dataloader, loss_fn, steps)
 
     acc.end_training()
 
