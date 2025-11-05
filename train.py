@@ -10,7 +10,7 @@ from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from config import cfg, tokenizer, CHECKPOINTS_DIR
+from config import cfg, tokenizer, CHECKPOINTS_DIR, IGNORE_INDEX
 from predict import complete_sentence
 from transformer.dataset import prepare_mask, ManualDataset
 from transformer.scheduler import TransformerLRScheduler
@@ -79,7 +79,7 @@ def setup_model():
         d_model=cfg["d_model"]
     )
 
-    loss_fn = CrossEntropyLoss(label_smoothing=0.1, ignore_index=-100)
+    loss_fn = CrossEntropyLoss(label_smoothing=0.1, ignore_index=IGNORE_INDEX)
     optimizer = torch.optim.Adam(transformer.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9)
     scheduler = TransformerLRScheduler(optimizer, d_model=cfg["d_model"], warmup_steps=4000)
 
@@ -108,8 +108,10 @@ def prepare_with_acc(acc, transformer, loss_fn, optimizer, train_dataloader, val
 def train_step(transformer, loss_fn, optimizer, acc, item):
     mask = prepare_mask(item['attention_mask'][..., :-1])
     inputs = item['input_ids'][..., :-1]
-    targets = item['input_ids'][..., 1:]
 
+    targets = item['input_ids'][..., 1:].clone()
+    target_attention = item['attention_mask'][..., 1:]
+    targets[target_attention == 0] = IGNORE_INDEX
 
     output = transformer(inputs, mask)
     loss = loss_fn(output.reshape(-1, output.size(-1)), targets.reshape(-1))
@@ -170,7 +172,10 @@ def validate(acc, transformer, val_dataloader, loss_fn, steps):
     for item in val_dataloader:
         mask = prepare_mask(item['attention_mask'][..., :-1])
         inputs = item['input_ids'][..., :-1]
-        targets = item['input_ids'][..., 1:]
+
+        targets = item['input_ids'][..., 1:].clone()
+        target_attention = item['attention_mask'][..., 1:]
+        targets[target_attention == 0] = IGNORE_INDEX
 
         with torch.no_grad():
             output = transformer(inputs, mask)

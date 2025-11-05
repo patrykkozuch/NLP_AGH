@@ -11,6 +11,8 @@ DATASETS_DIR.mkdir(parents=True, exist_ok=True)
 CHECKPOINTS_DIR = BASE_DIR / (f'checkpoints_' + os.getenv('SLURM_JOB_ID'))
 CHECKPOINTS_DIR.mkdir(parents=True, exist_ok=True)
 
+IGNORE_INDEX = -100
+
 cfg = {
     "batch_size": 64,
     "max_len": 512,
