@@ -14,7 +14,7 @@ CHECKPOINTS_DIR.mkdir(parents=True, exist_ok=True)
 IGNORE_INDEX = -100
 
 cfg = {
-    "batch_size": 64,
+    "batch_size": 32,
     "max_len": 512,
     "n_blocks": 12,
     "num_heads": 12,

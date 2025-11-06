@@ -25,7 +25,7 @@ def setup_accelerator():
         fullgraph=True,
         dynamic=False
     )
-    acc = Accelerator(cpu=False, log_with='wandb', mixed_precision='bf16', dynamo_plugin=dynamo_plugin)
+    acc = Accelerator(cpu=False, log_with='wandb', mixed_precision='bf16', dynamo_plugin=dynamo_plugin, gradient_accumulation_steps=2)
     acc.init_trackers(project_name=os.getenv('WANDB_PROJECT'), config=cfg)
     return acc
 
@@ -209,16 +209,17 @@ def main():
 
     for epoch in tqdm(range(cfg["epoches"])):
         for item in tqdm(train_dataloader, total=len(train_dataloader), leave=False):
-            loss = train_step(transformer, loss_fn, optimizer, acc, item)
+            with acc.accumulate():
+                loss = train_step(transformer, loss_fn, optimizer, acc, item)
 
-            if steps % cfg['log_freq'] == 0:
-                log_metrics(acc, loss, scheduler, steps)
+                if steps % cfg['log_freq'] == 0:
+                    log_metrics(acc, loss, scheduler, steps)
 
-            if steps % cfg['prompt_log_freq'] == 0:
-                log_examples(acc, transformer, test_dataloader, tokenizer, table, steps)
+                if steps % cfg['prompt_log_freq'] == 0:
+                    log_examples(acc, transformer, test_dataloader, tokenizer, table, steps)
 
-            if steps % cfg["chkpoint_freq"] == 0:
-                save_checkpoint(transformer, optimizer, steps)
+                if steps % cfg["chkpoint_freq"] == 0:
+                    save_checkpoint(transformer, optimizer, steps)
 
             if steps % cfg["val_freq"] == 0:
                 validate(acc, transformer, val_dataloader, loss_fn, steps)
