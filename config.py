@@ -16,7 +16,7 @@ IGNORE_INDEX = -100
 cfg = {
     "batch_size": 64,
     "max_len": 512,
-    "n_blocks": 8,
+    "n_blocks": 12,
     "num_heads": 12,
     "d_model": 768,
     "d_ff": 3072,
