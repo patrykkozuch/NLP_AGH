@@ -1,5 +1,6 @@
 import pandas as pd
 import datasets
+import unidecode
 from transformers import AutoTokenizer
 
 from config import cfg
@@ -18,7 +19,7 @@ def tokenize(texts):
         padding_side='right',
         max_length=513,
         return_overflowing_tokens=True,
-        stride=32
+        stride=64
     )
 
 def process_dataset(file_paths: list[str], output_path: str):
@@ -33,8 +34,6 @@ def process_dataset(file_paths: list[str], output_path: str):
 
 train_datasets = [
     'speakleash_dataset/plwikisource.jsonl.zst',
-    'speakleash_dataset/plwiki.jsonl.zst',
-    'speakleash_dataset/1000_novels_corpus_CLARIN-PL.jsonl.zst'
 ]
 
 valid_datasets = [

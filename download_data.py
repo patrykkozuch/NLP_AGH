@@ -6,10 +6,7 @@ sl = Speakleash(str(DATASETS_DIR))
 
 datasets = [
     'plwikisource',
-    '1000_novels_corpus_CLARIN-PL',
-    'plwiki',
     'wolne_lektury_corpus',
-    'web_artykuły_inne_148',
 ]
 
 for dataset in datasets:
