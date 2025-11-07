@@ -17,7 +17,7 @@ cfg = {
     "batch_size": 32,
     "max_len": 512,
     "n_blocks": 12,
-    "num_heads": 12,
+    "num_heads": 8,
     "d_model": 768,
     "d_ff": 3072,
     "log_freq": 1000,
