@@ -7,11 +7,6 @@ class Attention(nn.Module):
     """
     Attention module that performs Scaled Dot-Product Attention
     """
-
-    def __init__(self):
-        super().__init__()
-        self.dropout = nn.Dropout(0.1)
-
     def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, mask: torch.Tensor = None):
         scaled_product = (q @ k.mT) / math.sqrt(k.size(-1))
         attn_mask = torch.zeros(k.size(-2), v.size(-2), dtype=k.dtype, device=k.device)
@@ -21,7 +16,7 @@ class Attention(nn.Module):
             # Use additive mask to avoid attention problems with NaN values in softmax
             scaled_product += attn_mask
 
-        return self.dropout(nn.functional.softmax(scaled_product, dim=-1)) @ v
+        return nn.functional.softmax(scaled_product, dim=-1) @ v
 
 class MultiHeadAttention(nn.Module):
     """

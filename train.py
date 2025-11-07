@@ -116,7 +116,10 @@ def train_step(transformer, loss_fn, optimizer, acc, item):
     output = transformer(inputs, mask)
     loss = loss_fn(output.reshape(-1, output.size(-1)), targets.reshape(-1))
     acc.backward(loss)
-    acc.clip_grad_norm_(transformer.parameters(), 1)
+
+    if acc.sync_gradients:
+        acc.clip_grad_norm_(transformer.parameters(), 1)
+
     optimizer.step()
     optimizer.zero_grad()
 

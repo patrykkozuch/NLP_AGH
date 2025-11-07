@@ -14,8 +14,8 @@ class Decoder(nn.Module):
         self.dropout_masked_attn = nn.Dropout(p=0.1)
         self.ln_ff = nn.LayerNorm(d_model)
         self.ff = nn.Sequential(
-            nn.Linear(d_model, d_ff * 2),
-            nn.GLU(),
+            nn.Linear(d_model, d_ff),
+            nn.GELU(),
             nn.Linear(d_ff, d_model)
         )
         self.dropout_ff = nn.Dropout(p=0.1)
