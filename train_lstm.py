@@ -1,0 +1,220 @@
+import os
+
+import torch
+from accelerate import Accelerator
+from datasets import load_dataset
+
+import wandb
+from torch.nn import CrossEntropyLoss
+from torch.utils.data import DataLoader
+from tqdm import tqdm
+
+from config_lstm import cfg, tokenizer, CHECKPOINTS_DIR, IGNORE_INDEX
+from predict import complete_sentence
+from transformer.dataset import ManualDataset
+from transformer.scheduler import TransformerLRScheduler
+from lstm.lstm import LstmModel
+
+
+def setup_accelerator():
+    acc = Accelerator(cpu=False, log_with='wandb', mixed_precision='bf16', gradient_accumulation_steps=2)
+    acc.init_trackers(project_name=os.getenv('WANDB_PROJECT'), config=cfg)
+    return acc
+
+
+def load_datasets():
+    train_dataset = load_dataset(
+        'json',
+        data_files={'train': 'chunked.train.jsonl.zst'},
+        split='train'
+    ).with_format('torch')
+    train_dataloader = DataLoader(train_dataset, batch_size=cfg["batch_size"], num_workers=4, persistent_workers=True, pin_memory=True, shuffle=True)
+
+    val_dataset = load_dataset(
+        'json',
+        data_files={'validation': 'chunked.valid.jsonl.zst'},
+        split='validation'
+    ).with_format('torch')
+    val_dataloader = DataLoader(val_dataset, batch_size=cfg["batch_size"], num_workers=4, persistent_workers=True, pin_memory=True)
+
+    test_data = [
+        "Pamięć nie jest linią prostą. To raczej labirynt, w którym echo jednego kroku potrafi niespodziewanie",
+        "Zapadło między nimi milczenie tak gęste, że można je było kroić nożem. Nie była to jednak cisza pusta – przeciwnie, była ona naładowana tym wszystkim, co",
+        "Z każdą chwilą kontury pokoju stawały się coraz mniej wyraźne. Nie był pewien, czy to zmęczenie, czy może",
+        "Obserwował swoje dłonie, jakby należały do kogoś zupełnie obcego. Widział, jak podnoszą filiżankę, jak obracają klucz w zamku, ale on sam znajdował się",
+        "Pustka nie była jedynie brakiem. Była substancją, ciężką i zimną, która osiadała na meblach",
+        "Światło lampy drżało lekko, jakby wahało się, czy pozostać. Cienie na ścianach zdawały się szeptać coś o tym, co",
+        "Powietrze w pokoju stało się ciężkie, niemal namacalne. Miał wrażenie, że każdy jego oddech prowadzi go coraz bliżej miejsca, gdzie",
+        "Zegar tykał z uporem, który wydawał się kpić z jego bezruchu. W każdej sekundzie kryło się coś, czego nie potrafił",
+        "Krople deszczu spływały po szybie, zlewając się w krzywe linie. Przez chwilę zobaczył w nich twarze tych, których",
+        "Ulica była pusta, choć miał pewność, że ktoś go obserwuje. Kroki odbijały się echem od kamieni, niosąc w sobie coś, co",
+        "Na dnie filiżanki został osad, ciemny jak noc bez gwiazd. Wpatrywała się w niego, jakby próbowała odczytać z niego to, czego",
+        "Zapach kurzu i starych książek otulał go niczym wspomnienie. Każda strona, którą przewracał, zdawała się przypominać mu o tym, że",
+        "Świat za oknem przesuwał się powoli, jak w starym filmie. Granica między tym, co pamiętał, a tym, co sobie wyobrażał, stawała się",
+        "Kiedy wypowiedziała jego imię, brzmiało ono inaczej niż kiedykolwiek wcześniej. W tym jednym słowie kryło się coś, co mogło wszystko",
+        "Na chwilę wydawało mu się, że zrozumiał. Lecz myśl wymknęła się, zanim zdążył ją pochwycić, pozostawiając po sobie tylko echo, które"
+    ]
+
+    test_dataset = ManualDataset(test_data, tokenizer, cfg["max_len"])
+    test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False)
+
+    return train_dataloader, val_dataloader, test_dataloader
+
+
+def setup_model():
+    transformer = LstmModel(
+        vocab_size=len(tokenizer),
+        n_blocks=cfg["n_blocks"],
+        d_ff=cfg["d_ff"],
+        d_model=cfg["d_model"]
+    )
+
+    loss_fn = CrossEntropyLoss(ignore_index=IGNORE_INDEX)
+    optimizer = torch.optim.Adam(transformer.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9)
+    scheduler = TransformerLRScheduler(optimizer, d_model=cfg["d_model"], warmup_steps=4000)
+
+    return transformer, loss_fn, optimizer, scheduler
+
+
+def prepare_with_acc(acc, transformer, loss_fn, optimizer, train_dataloader, val_dataloader, test_dataloader):
+    (
+        transformer,
+        loss_fn,
+        optimizer,
+        train_dataloader,
+        val_dataloader,
+        test_dataloader
+    ) = acc.prepare(
+        transformer,
+        loss_fn,
+        optimizer,
+        train_dataloader,
+        val_dataloader,
+        test_dataloader
+    )
+    return transformer, loss_fn, optimizer, train_dataloader, val_dataloader, test_dataloader
+
+
+def train_step(model, loss_fn, optimizer, acc, item):
+    inputs = item['input_ids'][..., :-1]
+    targets = item['input_ids'][..., 1:].clone()
+
+    output = model(inputs)
+    loss = loss_fn(output.reshape(-1, output.size(-1)), targets.reshape(-1))
+    acc.backward(loss)
+
+    if acc.sync_gradients:
+        acc.clip_grad_norm_(model.parameters(), 1)
+
+    optimizer.step()
+    optimizer.zero_grad()
+
+    return loss
+
+
+def log_metrics(acc, loss, scheduler, steps):
+    acc.log(
+        values={
+            "Loss": loss,
+            "Perplexity": torch.exp(loss),
+            "Learning rate": scheduler.get_last_lr()[0]
+        },
+        step=steps
+    )
+
+
+def log_examples(acc, model, test_dataloader, tokenizer, table, steps):
+    model.eval()
+
+    for text in test_dataloader:
+        inputs = text['input_ids']
+        attention_mask = text['attention_mask']
+        # Complete the sentence
+        output_ids, output_text = complete_sentence(
+            model,
+            inputs,
+            attention_mask,
+            tokenizer
+        )
+
+        table.add_data(steps, text['original_text'][0][0], output_text[0], output_ids[0].cpu().numpy().tolist())
+
+    acc.log({"Example outputs": table}, step=steps)
+
+    model.train()
+
+
+def save_checkpoint(model, optimizer, steps):
+    ckpt_path = CHECKPOINTS_DIR / f'checkpoint_epoch_{steps}.pt'
+    torch.save({
+        'steps': steps,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'cfg': cfg,
+    }, ckpt_path)
+
+
+def validate(acc, model, val_dataloader, loss_fn, steps):
+    total_val_loss = 0.0
+    num_batches = 0
+
+    for item in val_dataloader:
+        inputs = item['input_ids'][..., :-1]
+
+        targets = item['input_ids'][..., 1:].clone()
+
+        with torch.no_grad():
+            output = model(inputs)
+            val_loss = loss_fn(output.reshape(-1, output.size(-1)), targets.reshape(-1))
+
+        total_val_loss += val_loss.item()
+        num_batches += 1
+
+    avg_val_loss = total_val_loss / num_batches if num_batches > 0 else 0.0
+
+    acc.log(
+        values={
+            "Validation Loss": avg_val_loss,
+            "Validation Perplexity": torch.exp(torch.tensor(avg_val_loss))
+        },
+        step=steps
+    )
+
+
+def main():
+    acc = setup_accelerator()
+    train_dataloader, val_dataloader, test_dataloader = load_datasets()
+    model, loss_fn, optimizer, scheduler = setup_model()
+    model, loss_fn, optimizer, train_dataloader, val_dataloader, test_dataloader = prepare_with_acc(
+        acc, model, loss_fn, optimizer, train_dataloader, val_dataloader, test_dataloader
+    )
+
+    steps = 0
+    table = wandb.Table(columns=["Steps", "Input", "Output", "Output tokens"], log_mode="INCREMENTAL")
+    model.train()
+
+    for epoch in tqdm(range(cfg["epoches"])):
+        for item in tqdm(train_dataloader, total=len(train_dataloader), leave=False):
+            with acc.accumulate():
+                loss = train_step(model, loss_fn, optimizer, acc, item)
+
+                if steps % cfg['log_freq'] == 0:
+                    log_metrics(acc, loss, scheduler, steps)
+
+                if steps % cfg['prompt_log_freq'] == 0:
+                    log_examples(acc, model, test_dataloader, tokenizer, table, steps)
+
+                if steps % cfg["chkpoint_freq"] == 0:
+                    save_checkpoint(model, optimizer, steps)
+
+            if steps % cfg["val_freq"] == 0:
+                validate(acc, model, val_dataloader, loss_fn, steps)
+
+            steps += 1
+            scheduler.step()
+
+    acc.end_training()
+
+
+if __name__ == "__main__":
+    main()
