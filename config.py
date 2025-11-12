@@ -25,6 +25,7 @@ cfg = {
     "val_freq": 10000,
     "epoches": 50,
     "chkpoint_freq": 5000,
+    "gradient_accumulation_steps": 4,
     "slurm_job_id": os.getenv('SLURM_JOB_ID', 'local_run')
 }
 

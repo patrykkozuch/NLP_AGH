@@ -17,7 +17,7 @@ from transformer.transformer import Transformer
 
 
 def setup_accelerator():
-    acc = Accelerator(cpu=False, log_with='wandb', mixed_precision='bf16', gradient_accumulation_steps=2)
+    acc = Accelerator(cpu=False, log_with='wandb', mixed_precision='fp8', gradient_accumulation_steps=cfg['gradient_accumulation_steps'])
     acc.init_trackers(project_name=os.getenv('WANDB_PROJECT'), config=cfg)
     return acc
 
@@ -71,7 +71,7 @@ def setup_model():
         d_model=cfg["d_model"]
     )
 
-    loss_fn = CrossEntropyLoss(ignore_index=IGNORE_INDEX)
+    loss_fn = CrossEntropyLoss(label_smoothing=0.1, ignore_index=IGNORE_INDEX)
     optimizer = torch.optim.Adam(transformer.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9)
     scheduler = TransformerLRScheduler(optimizer, d_model=cfg["d_model"], warmup_steps=4000)
 

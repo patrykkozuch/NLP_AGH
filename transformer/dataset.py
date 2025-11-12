@@ -80,8 +80,8 @@ class ManualDataset(Dataset):
                 max_length=max_len
             )
 
-            # Squeeze batch dimension
-            items = {k: v.squeeze(0) for k, v in tokens.items()}
+            # Squeeze batch dimension, remove EOS token for inputs
+            items = {k: v.squeeze(0)[:-1] for k, v in tokens.items()}
             items['original_text'] = [text]
             self.items.append(items)
 
