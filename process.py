@@ -1,12 +1,6 @@
-import pandas as pd
 import datasets
-import unidecode
-from transformers import AutoTokenizer
 
-from config import cfg
-from transformer.dataset import chunk_text
-
-tokenizer = AutoTokenizer.from_pretrained('speakleash/Bielik-1.5B-v3', use_fast=True)
+from config import tokenizer
 
 def tokenize(texts):
     return tokenizer(

@@ -28,4 +28,11 @@ cfg = {
     "slurm_job_id": os.getenv('SLURM_JOB_ID', 'local_run')
 }
 
-tokenizer = AutoTokenizer.from_pretrained('speakleash/Bielik-1.5B-v3', use_fast=True)
+tokenizer = AutoTokenizer.from_pretrained(
+    'speakleash/Bielik-1.5B-v3',
+    use_fast=True,
+    padding_side="right",
+    add_eos_token=True,
+    add_bos_token=True,
+    add_pad_token=True
+)

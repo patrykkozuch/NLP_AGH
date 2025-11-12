@@ -2,7 +2,6 @@ import os
 
 import torch
 from accelerate import Accelerator
-from accelerate.utils import TorchDynamoPlugin
 from datasets import load_dataset
 
 import wandb
