@@ -2,6 +2,7 @@ import os
 
 import torch
 from accelerate import Accelerator
+from accelerate.utils import TorchDynamoPlugin
 from datasets import load_dataset
 
 import wandb
@@ -17,7 +18,15 @@ from transformer.transformer import Transformer
 
 
 def setup_accelerator():
-    acc = Accelerator(cpu=False, log_with='wandb', mixed_precision='fp8', gradient_accumulation_steps=cfg['gradient_accumulation_steps'])
+    dynamo_plugin = TorchDynamoPlugin(
+        backend="inductor",  # Options: "inductor", "aot_eager", "aot_nvfuser", etc.
+        mode="max-autotune",  # Options: "default", "reduce-overhead", "max-autotune"
+        use_regional_compilation=True,
+        fullgraph=True,
+        dynamic=False
+    )
+
+    acc = Accelerator(cpu=False, log_with='wandb', mixed_precision='fp16', gradient_accumulation_steps=cfg['gradient_accumulation_steps'], dynamo_plugin=dynamo_plugin)
     acc.init_trackers(project_name=os.getenv('WANDB_PROJECT'), config=cfg)
     return acc
 
@@ -78,11 +87,12 @@ def setup_model():
     return transformer, loss_fn, optimizer, scheduler
 
 
-def prepare_with_acc(acc, transformer, loss_fn, optimizer, train_dataloader, val_dataloader, test_dataloader):
+def prepare_with_acc(acc, transformer, loss_fn, optimizer, scheduler, train_dataloader, val_dataloader, test_dataloader):
     (
         transformer,
         loss_fn,
         optimizer,
+        scheduler,
         train_dataloader,
         val_dataloader,
         test_dataloader
@@ -90,14 +100,17 @@ def prepare_with_acc(acc, transformer, loss_fn, optimizer, train_dataloader, val
         transformer,
         loss_fn,
         optimizer,
+        scheduler,
         train_dataloader,
         val_dataloader,
         test_dataloader
     )
-    return transformer, loss_fn, optimizer, train_dataloader, val_dataloader, test_dataloader
+    return transformer, loss_fn, optimizer, scheduler, train_dataloader, val_dataloader, test_dataloader
 
 
-def train_step(transformer, loss_fn, optimizer, acc, item):
+def train_step(transformer, loss_fn, optimizer, scheduler, acc, item):
+    transformer.train()
+
     mask = prepare_mask(item['attention_mask'][..., :-1])
     inputs = item['input_ids'][..., :-1]
 
@@ -106,13 +119,17 @@ def train_step(transformer, loss_fn, optimizer, acc, item):
     targets[target_attention == 0] = IGNORE_INDEX
 
     output = transformer(inputs, mask)
-    loss = loss_fn(output.reshape(-1, output.size(-1)), targets.reshape(-1))
+
+    with acc.autocast():
+        loss = loss_fn(output.reshape(-1, output.size(-1)), targets.reshape(-1))
+
     acc.backward(loss)
 
     if acc.sync_gradients:
         acc.clip_grad_norm_(transformer.parameters(), 1)
 
     optimizer.step()
+    scheduler.step()
     optimizer.zero_grad()
 
     return loss
@@ -147,9 +164,6 @@ def log_examples(acc, transformer, test_dataloader, tokenizer, table, steps):
 
     acc.log({"Example outputs": table}, step=steps)
 
-    transformer.train()
-
-
 def save_checkpoint(transformer, optimizer, steps):
     ckpt_path = CHECKPOINTS_DIR / f'checkpoint_epoch_{steps}.pt'
     torch.save({
@@ -161,6 +175,7 @@ def save_checkpoint(transformer, optimizer, steps):
 
 
 def validate(acc, transformer, val_dataloader, loss_fn, steps):
+    transformer.eval()
     total_val_loss = 0.0
     num_batches = 0
 
@@ -194,33 +209,29 @@ def main():
     acc = setup_accelerator()
     train_dataloader, val_dataloader, test_dataloader = load_datasets()
     transformer, loss_fn, optimizer, scheduler = setup_model()
-    transformer, loss_fn, optimizer, train_dataloader, val_dataloader, test_dataloader = prepare_with_acc(
-        acc, transformer, loss_fn, optimizer, train_dataloader, val_dataloader, test_dataloader
+    transformer, loss_fn, optimizer, scheduler, train_dataloader, val_dataloader, test_dataloader = prepare_with_acc(
+        acc, transformer, loss_fn, optimizer, scheduler, train_dataloader, val_dataloader, test_dataloader
     )
-
     steps = 0
     table = wandb.Table(columns=["Steps", "Input", "Output", "Output tokens"], log_mode="INCREMENTAL")
-    transformer.train()
 
-    for epoch in tqdm(range(cfg["epoches"])):
-        for item in tqdm(train_dataloader, total=len(train_dataloader), leave=False):
-            with acc.accumulate():
-                loss = train_step(transformer, loss_fn, optimizer, acc, item)
+    for epoch in tqdm(range(cfg["epoches"]), disable=not acc.is_local_main_process):
+        for item in train_dataloader:
+            with acc.accumulate(transformer):
+                loss = train_step(transformer, loss_fn, optimizer, scheduler, acc, item)
+                steps += 1
 
-                if steps % cfg['log_freq'] == 0:
-                    log_metrics(acc, loss, scheduler, steps)
+            if steps % cfg['log_freq'] == 0:
+                log_metrics(acc, loss, scheduler, steps)
 
-                if steps % cfg['prompt_log_freq'] == 0:
-                    log_examples(acc, transformer, test_dataloader, tokenizer, table, steps)
+            if steps % cfg['prompt_log_freq'] == 0:
+                log_examples(acc, transformer, test_dataloader, tokenizer, table, steps)
 
-                if steps % cfg["chkpoint_freq"] == 0:
-                    save_checkpoint(transformer, optimizer, steps)
+            if steps % cfg["chkpoint_freq"] == 0:
+                save_checkpoint(transformer, optimizer, steps)
 
             if steps % cfg["val_freq"] == 0:
                 validate(acc, transformer, val_dataloader, loss_fn, steps)
-
-            steps += 1
-            scheduler.step()
 
     acc.end_training()
 

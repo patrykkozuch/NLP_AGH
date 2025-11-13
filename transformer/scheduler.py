@@ -1,4 +1,9 @@
-class TransformerLRScheduler:
+from typing import Optional
+
+from torch.optim.lr_scheduler import LRScheduler
+
+
+class TransformerLRScheduler(LRScheduler):
     """
     Learning rate scheduler from 'Attention Is All You Need' paper.
 
@@ -11,12 +16,13 @@ class TransformerLRScheduler:
     """
 
     def __init__(self, optimizer, d_model, warmup_steps=4000):
-        self.optimizer = optimizer
         self.d_model = d_model
         self.warmup_steps = warmup_steps
         self.step_num = 1
+        self.optimizer = optimizer
+        super().__init__(optimizer)
 
-    def step(self):
+    def step(self, epoch: Optional[int] = None):
         """Update learning rate after each training step."""
         self.step_num += 1
         lr = self._get_lr()
