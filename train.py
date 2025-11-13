@@ -37,14 +37,14 @@ def load_datasets():
         data_files={'train': 'chunked.train.jsonl.zst'},
         split='train'
     ).with_format('torch')
-    train_dataloader = DataLoader(train_dataset, batch_size=cfg["batch_size"], num_workers=4, persistent_workers=True, pin_memory=True, shuffle=True)
+    train_dataloader = DataLoader(train_dataset, batch_size=cfg["batch_size"], num_workers=8, persistent_workers=True, pin_memory=True, shuffle=True)
 
     val_dataset = load_dataset(
         'json',
         data_files={'validation': 'chunked.valid.jsonl.zst'},
         split='validation'
     ).with_format('torch')
-    val_dataloader = DataLoader(val_dataset, batch_size=cfg["batch_size"], num_workers=4, persistent_workers=True, pin_memory=True)
+    val_dataloader = DataLoader(val_dataset, batch_size=cfg["batch_size"], num_workers=8, persistent_workers=True, pin_memory=True)
 
     test_data = [
         "Pamięć nie jest linią prostą. To raczej labirynt, w którym echo jednego kroku potrafi niespodziewanie",
