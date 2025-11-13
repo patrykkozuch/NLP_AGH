@@ -1,4 +1,5 @@
 import torch
+from transformer.dataset import prepare_mask
 
 
 def complete_sentence(model, input_ids, attention_mask, tokenizer, max_new_tokens=128, device='cuda'):
@@ -14,7 +15,8 @@ def complete_sentence(model, input_ids, attention_mask, tokenizer, max_new_token
     with torch.no_grad():
         for _ in range(max_new_tokens):
             # Get prediction for the entire sequence
-            output = model(current_ids)  # (batch, seq_len, vocab_size)
+            mask = prepare_mask(current_mask)
+            output = model(current_ids, mask)  # (batch, seq_len, vocab_size)
 
             # Get logits for the last real token position
             real_positions = (current_mask == 1).long()
