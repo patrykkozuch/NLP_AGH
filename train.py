@@ -26,7 +26,7 @@ def setup_accelerator():
         dynamic=False
     )
 
-    acc = Accelerator(cpu=False, log_with='wandb', mixed_precision='fp16', gradient_accumulation_steps=cfg['gradient_accumulation_steps'], dynamo_plugin=dynamo_plugin)
+    acc = Accelerator(cpu=False, log_with='wandb', mixed_precision='bf16', gradient_accumulation_steps=cfg['gradient_accumulation_steps'], dynamo_plugin=dynamo_plugin)
     acc.init_trackers(project_name=os.getenv('WANDB_PROJECT'), config=cfg)
     return acc
 
