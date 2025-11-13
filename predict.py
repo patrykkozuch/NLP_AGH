@@ -25,14 +25,14 @@ def complete_sentence(model, input_ids, attention_mask, tokenizer, max_new_token
             # Sample next token
             next_token = torch.multinomial(torch.softmax(next_token_logits, dim=-1), num_samples=1)
 
-            # Check for end-of-sequence
-            if (next_token == tokenizer.eos_token_id).all():
-                break
-
             # Simply append the new token to the sequence
             current_ids = torch.cat([current_ids, next_token], dim=1)
             current_mask = torch.cat([current_mask, torch.ones_like(next_token)], dim=1)
 
+            # Check for end-of-sequence
+            if (next_token == tokenizer.eos_token_id).all():
+                break
+
     # Decode to text
-    completed_text = tokenizer.batch_decode(current_ids, skip_special_tokens=True)
+    completed_text = tokenizer.batch_decode(current_ids, skip_special_tokens=False)
     return current_ids, completed_text
