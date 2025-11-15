@@ -86,7 +86,7 @@ def load_datasets(tokenizer: PreTrainedTokenizerBase, training_dataset_path: str
 
 
 def setup_utils(model: torch.nn.Module, cfg: dict):
-    loss_fn = CrossEntropyLoss(label_smoothing=0.1, ignore_index=IGNORE_INDEX)
+    loss_fn = CrossEntropyLoss(ignore_index=IGNORE_INDEX)
     optimizer = torch.optim.Adam(model.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9)
     scheduler = TransformerLRScheduler(optimizer, d_model=cfg["d_model"], warmup_steps=4000)
 
