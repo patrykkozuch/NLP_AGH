@@ -23,6 +23,9 @@ def main(cfg: dict = None):
         add_pad_token=True
     )
 
+    if tokenizer.pad_token_id is None:
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+
     model = Transformer(
         vocab_size=len(tokenizer),
         seq_len=cfg["max_len"],
