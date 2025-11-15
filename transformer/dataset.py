@@ -2,7 +2,7 @@ import torch
 
 from torch.utils.data import Dataset
 
-from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
+from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast, PreTrainedTokenizerBase
 
 
 def chunk_text(tokens: list[int], tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast, chunk_size=256):
@@ -67,7 +67,7 @@ class ManualDataset(Dataset):
     Custom Dataset for manual text inputs.
     """
 
-    def __init__(self, texts: list[str], tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast, max_len=256):
+    def __init__(self, texts: list[str], tokenizer: PreTrainedTokenizerBase, max_len=256):
         self.items = []
 
         for text in texts:

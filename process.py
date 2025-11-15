@@ -1,8 +1,8 @@
 import datasets
+from transformers import PreTrainedTokenizerBase
 
-from config import tokenizer
 
-def tokenize(texts):
+def tokenize(tokenizer, texts):
     return tokenizer(
         texts['text'],
         add_special_tokens=True,
@@ -16,23 +16,11 @@ def tokenize(texts):
         stride=64
     )
 
-def process_dataset(file_paths: list[str], output_path: str):
+def process_dataset(tokenizer: PreTrainedTokenizerBase, file_paths: list[str]):
     dataset = (
-        datasets.load_dataset('json', data_files=file_paths, num_proc=20)
+        datasets.load_dataset('json', data_files=file_paths, split='train')
         .filter(lambda x: x['meta']['quality'] == 'HIGH', num_proc=20, desc='Filtering by quality')
-        .map(tokenize, batched=True, num_proc=20, remove_columns=['meta', 'text'], desc='Tokenizing')
+        .map(lambda x: tokenize(tokenizer, x), batched=True, num_proc=20, remove_columns=['meta', 'text'], desc='Tokenizing')
         .remove_columns('overflow_to_sample_mapping')
     )
-    dataset['train'].to_json(output_path)
     return dataset
-
-train_datasets = [
-    'speakleash_dataset/plwikisource.jsonl.zst',
-]
-
-valid_datasets = [
-    'speakleash_dataset/wolne_lektury_corpus.jsonl.zst'
-]
-
-process_dataset(train_datasets, 'chunked.train.jsonl.zst')
-process_dataset(valid_datasets, 'chunked.valid.jsonl.zst')

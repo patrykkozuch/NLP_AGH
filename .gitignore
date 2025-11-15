@@ -17,3 +17,5 @@ speakleash_dataset
 
 # Other
 wandb
+.idea/
+checkpoints*/

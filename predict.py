@@ -1,8 +1,17 @@
 import torch
+from transformers import PreTrainedTokenizerBase
+
 from transformer.dataset import prepare_mask
 
 
-def complete_sentence(model, input_ids, attention_mask, tokenizer, max_new_tokens=128, device='cuda'):
+def complete_sentence(
+        model: torch.nn.Module,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        tokenizer: PreTrainedTokenizerBase,
+        max_new_tokens=128,
+        device='cuda'
+) -> tuple[torch.Tensor, list[str]]:
     """
     Complete a sentence by generating tokens autoregressively.
     """

@@ -2,10 +2,10 @@ import argparse
 
 from transformers import AutoTokenizer
 
-import training.lstm
+import training.transformer
 from config import base_cfg
-from lstm.lstm import LstmModel
 from training.common import train
+from transformer.transformer import Transformer
 
 
 def main(cfg: dict = None):
@@ -23,7 +23,7 @@ def main(cfg: dict = None):
         add_pad_token=True
     )
 
-    model = LstmModel(
+    model = Transformer(
         vocab_size=len(tokenizer),
         seq_len=cfg["max_len"],
         n_blocks=cfg["n_blocks"],
@@ -32,7 +32,7 @@ def main(cfg: dict = None):
         d_model=cfg["d_model"]
     )
 
-    train(model, tokenizer, cfg, training.lstm.train_step, training.lstm.validate)
+    train(model, tokenizer, cfg, training.transformer.train_step, training.transformer.validate)
 
 
 if __name__ == "__main__":
