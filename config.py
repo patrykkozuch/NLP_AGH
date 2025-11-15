@@ -23,7 +23,7 @@ base_cfg = {
     "val_freq": 10000,
     "epoches": 50,
     "chkpoint_freq": 5000,
-    "gradient_accumulation_steps": 4,
+    "gradient_accumulation_steps": 2,
     "tokenizer": 'speakleash/Bielik-1.5B-v3',
     "slurm_job_id": os.getenv('SLURM_JOB_ID', 'local_run'),
 }
