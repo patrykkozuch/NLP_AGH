@@ -40,7 +40,7 @@ def setup_accelerator(cfg: dict):
 
 
 def load_datasets(tokenizer: PreTrainedTokenizerBase, training_dataset_path: str, cfg: dict):
-    split = process_dataset(tokenizer, [training_dataset_path]).train_test_split(test_size=0.1)
+    split = process_dataset(tokenizer, [training_dataset_path]).train_test_split(test_size=0.025)
     train_dataset = split['train'].with_format('torch')
     valid_dataset = split['test'].with_format('torch')
 
