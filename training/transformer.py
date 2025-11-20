@@ -1,3 +1,5 @@
+import re
+
 import torch
 from accelerate import Accelerator
 from torch.nn import CrossEntropyLoss
@@ -33,6 +35,7 @@ def train_step(model, loss_fn, optimizer, scheduler, acc, item):
 
     return loss
 
+
 def validate(
         acc: Accelerator,
         model: torch.nn.Module,
@@ -42,57 +45,82 @@ def validate(
         steps: int
 ):
     model.eval()
-    total_val_nll = 0.0
-    total_tokens = 0
-    total_words = 0
-    total_chars = 0
-    num_batches = 0
+
+    metrics = torch.zeros(4, device=acc.device)
 
     for item in val_dataloader:
-        mask = prepare_mask(item['attention_mask'][..., :-1])
-        inputs = item['input_ids'][..., :-1]
+        input_ids = item['input_ids']
+        attention_mask = item['attention_mask']
 
-        targets = item['input_ids'][..., 1:].clone()
-        target_attention = item['attention_mask'][..., 1:]
+        inputs = input_ids[..., :-1]
+        targets = input_ids[..., 1:].clone()
+
+        mask = prepare_mask(attention_mask[..., :-1])
+
+        target_attention = attention_mask[..., 1:]
         targets[target_attention == 0] = IGNORE_INDEX
 
-        with acc.autocast(), torch.no_grad():
+        with torch.no_grad():
             output = model(inputs, mask)
-            val_loss = loss_fn(output.reshape(-1, output.size(-1)), targets.reshape(-1)).item()
 
-        # accumulate negative log-likelihood (NLL) weighted by number of valid tokens
-        num_valid_tokens = (targets.reshape(-1) != IGNORE_INDEX).sum().item()
-        total_val_nll += val_loss * num_valid_tokens
-        total_tokens += num_valid_tokens
+            logits = output.reshape(-1, output.size(-1))
+            flat_targets = targets.reshape(-1)
 
-        # Decode target sequences to count words and characters
-        batch_target_ids = item['input_ids'][..., 1:]
-        batch_target_attn = target_attention
-        for ids, attn in zip(batch_target_ids, batch_target_attn):
+            loss = loss_fn(logits, flat_targets)
+
+        num_valid_tokens = (flat_targets != -100).sum()
+        batch_nll = loss * num_valid_tokens
+
+        metrics[0] += batch_nll
+        metrics[1] += num_valid_tokens
+
+        batch_word_count = 0
+        batch_char_count = 0
+
+        batch_target_ids = input_ids[..., 1:]
+
+        for ids, attn in zip(batch_target_ids.cpu(), target_attention.cpu()):
             valid_len = int(attn.sum().item())
             if valid_len == 0:
                 continue
-            decoded = tokenizer.decode(ids[:valid_len].tolist(), skip_special_tokens=True)
-            words = len(decoded.split())
-            chars = len(decoded.replace(" ", ""))
-            total_words += max(words, 1)
-            total_chars += max(chars, 1)
 
-        num_batches += 1
+            decoded = tokenizer.decode(ids[:valid_len], skip_special_tokens=True)
 
-    avg_val_loss = total_val_nll / total_tokens if total_tokens > 0 else 0.0
+            words_in_seq = len(re.findall(r'\w+', decoded, re.UNICODE))
+            chars_in_seq = len(decoded.replace(" ", ""))
 
-    token_ppl = torch.exp(torch.tensor(total_val_nll / total_tokens)) if total_tokens > 0 else torch.tensor(
-        float('inf'))
-    word_ppl = torch.exp(torch.tensor(total_val_nll / total_words)) if total_words > 0 else torch.tensor(float('inf'))
-    char_ppl = torch.exp(torch.tensor(total_val_nll / total_chars)) if total_chars > 0 else torch.tensor(float('inf'))
+            batch_word_count += max(words_in_seq, 1)  # Safety min 1
+            batch_char_count += max(chars_in_seq, 1)
+
+        metrics[2] += batch_word_count
+        metrics[3] += batch_char_count
+
+    # Sum metrics across all GPUs
+    metrics = acc.reduce(metrics, reduction="sum")
+
+    total_val_nll = metrics[0].item()
+    total_tokens = metrics[1].item()
+    total_words = metrics[2].item()
+    total_chars = metrics[3].item()
+
+    # Avoid division by zero
+    if total_tokens == 0 or total_words == 0:
+        acc.print("Warning: Validation set was empty or fully masked.")
+        return
+
+    avg_val_loss = total_val_nll / total_tokens
+    token_ppl = torch.exp(torch.tensor(avg_val_loss)).item()
+    word_ppl = torch.exp(torch.tensor(total_val_nll / total_words)).item()
+    char_ppl = torch.exp(torch.tensor(total_val_nll / total_chars)).item()
 
     acc.log(
         values={
-            "Validation Loss": avg_val_loss,
-            "Validation Perplexity": token_ppl,
-            "Word-level Perplexity": word_ppl,
-            "Char-level Perplexity": char_ppl
+            "val_loss": avg_val_loss,
+            "ppl_token": token_ppl,
+            "ppl_word": word_ppl,
+            "ppl_char": char_ppl
         },
         step=steps
     )
+
+    acc.print(f"Step {steps}: Token PPL: {token_ppl:.2f} | Word PPL: {word_ppl:.2f}")
