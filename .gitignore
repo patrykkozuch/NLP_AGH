@@ -19,3 +19,4 @@ speakleash_dataset
 wandb
 .idea/
 checkpoints*/
+models/
