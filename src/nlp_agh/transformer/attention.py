@@ -4,6 +4,10 @@ import torch
 import torch.nn as nn
 
 class Attention(nn.Module):
+    def __init__(self, dropout_rate: float):
+        super().__init__()
+        self.dropout = nn.Dropout(dropout_rate)
+
     """
     Attention module that performs Scaled Dot-Product Attention
     """
@@ -16,7 +20,7 @@ class Attention(nn.Module):
             # Use additive mask to avoid attention problems with NaN values in softmax
             scaled_product += attn_mask
 
-        return nn.functional.softmax(scaled_product, dim=-1) @ v
+        return self.dropout(nn.functional.softmax(scaled_product, dim=-1)) @ v
 
 class MultiHeadAttention(nn.Module):
     """
@@ -24,13 +28,13 @@ class MultiHeadAttention(nn.Module):
 
     Calculates a Scaled Dot-Product Attention for multiple attention heads
     """
-    def __init__(self, num_heads: int, d_model: int, *args, **kwargs):
+    def __init__(self, num_heads: int, d_model: int, dropout_rate: float, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.num_heads = num_heads
         self.d_model = d_model
         self.d_head = d_model // num_heads
 
-        self.attention = Attention()
+        self.attention = Attention(dropout_rate)
 
         # Projection matrices
         self.W_q = nn.Linear(d_model, d_model)
