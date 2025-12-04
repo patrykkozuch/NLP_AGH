@@ -60,7 +60,6 @@ class Transformer(nn.Module):
         ])
 
         self.ln = nn.LayerNorm(d_model)
-        self.linear = nn.Linear(d_model, vocab_size)
 
     def forward(self, x: torch.Tensor, mask: torch.Tensor = None):
         x = self.embedding(x)
@@ -71,6 +70,5 @@ class Transformer(nn.Module):
             x = decoder_block(x, mask)
 
         x = self.ln(x)
-        x = self.linear(x)
 
         return x
